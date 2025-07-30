@@ -788,16 +788,21 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ih
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {
 #ifdef TON_IPC_ENABLED
-  LOG(INFO) << "[IPC] process_broadcast(externalMessageBroadcast) called from " << src.to_hex();
+  LOG(INFO) << "[IPC-TRACE] FullNodeShardImpl::process_broadcast(externalMessageBroadcast) called";
+  LOG(INFO) << "[IPC-TRACE]   Source: " << src;
+  LOG(INFO) << "[IPC-TRACE]   Data size: " << query.message_->data_.size();
+  
   if (auto* publisher = IPCPublisher::instance()) {
-    LOG(INFO) << "[IPC] Publishing external message event, data size: " << query.message_->data_.size();
-    // Create a copy of the data for IPC
-    auto message = td::Ref<ExtMessage>(true, query.message_->data_.clone());
-    publisher->publish_external_message(message);
+    // For now, just log that we received an external message
+    // We'll need to parse the message data to extract destination info
+    LOG(INFO) << "[IPC-TRACE] Would publish external message event here";
+    // TODO: Parse query.message_->data_ to create proper ExtMessage object
   } else {
-    LOG(WARNING) << "[IPC] IPCPublisher instance is null";
+    LOG(WARNING) << "[IPC-TRACE] IPCPublisher instance is null";
   }
 #endif
+  
+  LOG(INFO) << "[IPC-TRACE] Forwarding to ValidatorManager::new_external_message";
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
                           std::move(query.message_->data_), 0);
 }
@@ -847,11 +852,18 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_bl
 }
 
 void FullNodeShardImpl::process_block_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query) {
+  LOG(INFO) << "[IPC-TRACE] FullNodeShardImpl::process_block_broadcast called";
+  LOG(INFO) << "[IPC-TRACE]   Processing block broadcast from " << src;
+  
   auto B = deserialize_block_broadcast(query, overlay::Overlays::max_fec_broadcast_size());
   if (B.is_error()) {
     LOG(DEBUG) << "dropped broadcast: " << B.move_as_error();
     return;
   }
+  
+  LOG(INFO) << "[IPC-TRACE]   Block ID: " << B.ok().block_id.to_str();
+  LOG(INFO) << "[IPC-TRACE]   Forwarding to FullNode::process_block_broadcast";
+  
   //if (!shard_is_ancestor(shard_, block_id.shard_full())) {
   //  LOG(FULL_NODE_WARNING) << "dropping block broadcast: shard mismatch. overlay=" << shard_.to_str()
   //                         << " block=" << block_id.to_str();
@@ -862,14 +874,22 @@ void FullNodeShardImpl::process_block_broadcast(PublicKeyHash src, ton_api::tonN
 }
 
 void FullNodeShardImpl::receive_broadcast(PublicKeyHash src, td::BufferSlice broadcast) {
+  LOG(INFO) << "[IPC-TRACE] FullNodeShardImpl::receive_broadcast called";
+  LOG(INFO) << "[IPC-TRACE]   Source: " << src;
+  LOG(INFO) << "[IPC-TRACE]   Broadcast size: " << broadcast.size();
+  LOG(INFO) << "[IPC-TRACE]   Shard: " << shard_.to_str();
+  
   if (!active_) {
+    LOG(INFO) << "[IPC-TRACE]   Shard not active, ignoring broadcast";
     return;
   }
   auto B = fetch_tl_object<ton_api::tonNode_Broadcast>(std::move(broadcast), true);
   if (B.is_error()) {
+    LOG(INFO) << "[IPC-TRACE]   Failed to parse broadcast: " << B.error();
     return;
   }
 
+  LOG(INFO) << "[IPC-TRACE]   Broadcast type: " << B.ok()->get_id();
   ton_api::downcast_call(*B.move_as_ok().get(), [src, Self = this](auto &obj) { Self->process_broadcast(src, obj); });
 }
 

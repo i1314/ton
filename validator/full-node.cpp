@@ -636,14 +636,19 @@ void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton
 }
 
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
+  LOG(INFO) << "[IPC-TRACE] FullNodeImpl::process_block_broadcast called";
+  LOG(INFO) << "[IPC-TRACE]   Block: " << broadcast.block_id.to_str();
+  LOG(INFO) << "[IPC-TRACE]   Workchain: " << broadcast.block_id.id.workchain;
+  LOG(INFO) << "[IPC-TRACE]   Shard: " << std::hex << broadcast.block_id.id.shard << std::dec;
+  LOG(INFO) << "[IPC-TRACE]   Seqno: " << broadcast.block_id.id.seqno;
+  
   // IPC hook for new blocks - called as soon as received from network
 #ifdef TON_IPC_ENABLED
-  LOG(INFO) << "[IPC] process_block_broadcast called for block " << broadcast.block_id.to_str();
   if (auto* publisher = IPCPublisher::instance()) {
-    LOG(INFO) << "[IPC] Publishing new block event";
+    LOG(INFO) << "[IPC-TRACE] Publishing new block event via IPC";
     publisher->publish_new_block(broadcast.block_id, td::Ref<BlockData>());
   } else {
-    LOG(WARNING) << "[IPC] Publisher instance is null";
+    LOG(WARNING) << "[IPC-TRACE] IPCPublisher instance is null";
   }
 #endif
   
