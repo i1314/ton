@@ -1829,19 +1829,9 @@ void ValidatorManagerImpl::send_get_next_key_blocks_request(BlockIdExt block_id,
 }
 
 void ValidatorManagerImpl::send_external_message(td::Ref<ExtMessage> message) {
+  // Note: This is for SENDING external messages (e.g., from RPC), not receiving them
+  // The receive hook is in full-node-shard.cpp process_broadcast()
   callback_->send_ext_message(message->shard(), message->serialize());
-  
-  // IPC hook for external messages
-#ifdef TON_IPC_ENABLED
-  LOG(INFO) << "[IPC] send_external_message called";
-  if (auto* publisher = IPCPublisher::instance()) {
-    LOG(INFO) << "[IPC] Publishing external message event";
-    publisher->publish_external_message(message);
-  } else {
-    LOG(WARNING) << "[IPC] Publisher instance is null";
-  }
-#endif
-  
   add_external_message(std::move(message), 0);
 }
 

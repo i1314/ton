@@ -38,6 +38,9 @@
 #include "net/get-next-key-blocks.hpp"
 #include "net/download-archive-slice.hpp"
 #include "impl/out-msg-queue-proof.hpp"
+#ifdef TON_IPC_ENABLED
+#include "ipc-publisher.hpp"
+#endif
 
 #include "td/utils/Random.h"
 
@@ -784,6 +787,17 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ih
 }
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {
+#ifdef TON_IPC_ENABLED
+  LOG(INFO) << "[IPC] process_broadcast(externalMessageBroadcast) called from " << src.to_hex();
+  if (auto* publisher = IPCPublisher::instance()) {
+    LOG(INFO) << "[IPC] Publishing external message event, data size: " << query.message_->data_.size();
+    // Create a copy of the data for IPC
+    auto message = td::Ref<ExtMessage>(true, query.message_->data_.clone());
+    publisher->publish_external_message(message);
+  } else {
+    LOG(WARNING) << "[IPC] IPCPublisher instance is null";
+  }
+#endif
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
                           std::move(query.message_->data_), 0);
 }
