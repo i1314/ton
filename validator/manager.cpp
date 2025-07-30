@@ -48,6 +48,9 @@
 #include "td/utils/filesystem.h"
 
 #include "validator/stats-merger.h"
+#ifdef TON_IPC_ENABLED
+#include "ipc-publisher.hpp"
+#endif
 
 #include <fstream>
 
@@ -1818,6 +1821,14 @@ void ValidatorManagerImpl::send_get_next_key_blocks_request(BlockIdExt block_id,
 
 void ValidatorManagerImpl::send_external_message(td::Ref<ExtMessage> message) {
   callback_->send_ext_message(message->shard(), message->serialize());
+  
+  // IPC hook for external messages
+#ifdef TON_IPC_ENABLED
+  if (auto* publisher = IPCPublisher::instance()) {
+    publisher->publish_external_message(message);
+  }
+#endif
+  
   add_external_message(std::move(message), 0);
 }
 
@@ -1931,6 +1942,28 @@ void ValidatorManagerImpl::start_up() {
   storage_stat_cache_ = td::actor::create_actor<StorageStatCache>("storagestatcache");
   td::mkdir(db_root_ + "/tmp/").ensure();
   td::mkdir(db_root_ + "/catchains/").ensure();
+
+#ifdef TON_IPC_ENABLED
+  // Initialize IPC publisher if configured
+  if (opts_->get_ipc_enabled()) {
+    IPCPublisher::IPCConfig ipc_config;
+    ipc_config.enabled = true;
+    ipc_config.socket_path = opts_->get_ipc_socket_path();
+    ipc_config.publish_external_messages = opts_->get_ipc_publish_external_messages();
+    ipc_config.publish_new_blocks = opts_->get_ipc_publish_new_blocks();
+    ipc_config.publish_contract_changes = opts_->get_ipc_publish_contract_changes();
+    ipc_config.monitored_addresses = opts_->get_ipc_monitored_addresses();
+    
+    // Create the singleton instance
+    IPCPublisher::init(ipc_config);
+    
+    // Create the actor
+    auto publisher = td::actor::create_actor<IPCPublisher>("ipc-publisher", std::move(ipc_config));
+    publisher.release();
+    
+    LOG(INFO) << "IPC publisher initialized on " << ipc_config.socket_path;
+  }
+#endif
 
   auto Q =
       td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::actor::ActorOwn<adnl::AdnlExtServer>> R) {

@@ -111,6 +111,12 @@ set(VALIDATOR_SOURCE
   ${VALIDATOR_HEADERS}
 )
 
+# IPC Publisher sources (only if enabled)
+if(TON_IPC_ENABLED)
+  list(APPEND VALIDATOR_SOURCE ipc-publisher.cpp)
+  list(APPEND VALIDATOR_HEADERS ipc-publisher.hpp)
+endif()
+
 set(DISK_VALIDATOR_SOURCE
   apply-block.cpp
   block-handle.cpp
@@ -224,3 +230,9 @@ target_link_libraries(validator-disk PRIVATE tdactor adnl rldp tl_api dht tdfec 
 target_link_libraries(validator-hardfork PRIVATE tdactor adnl rldp tl_api dht tdfec overlay catchain validatorsession ton_db)
 
 target_link_libraries(full-node PRIVATE tdactor adnl rldp rldp2 tl_api dht tdfec overlay catchain validatorsession ton_db)
+
+# Add IPC compile definition if enabled
+if(TON_IPC_ENABLED)
+  target_compile_definitions(validator PRIVATE TON_IPC_ENABLED)
+  target_compile_definitions(full-node PRIVATE TON_IPC_ENABLED)
+endif()

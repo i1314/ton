@@ -24,6 +24,9 @@
 #include "impl/out-msg-queue-proof.hpp"
 #include "td/utils/Random.h"
 #include "ton/ton-tl.hpp"
+#ifdef TON_IPC_ENABLED
+#include "ipc-publisher.hpp"
+#endif
 
 namespace ton {
 
@@ -633,6 +636,13 @@ void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton
 }
 
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
+  // IPC hook for new blocks - called as soon as received from network
+#ifdef TON_IPC_ENABLED
+  if (auto* publisher = IPCPublisher::instance()) {
+    publisher->publish_new_block(broadcast.block_id, td::Ref<BlockData>());
+  }
+#endif
+  
   send_block_broadcast_to_custom_overlays(broadcast);
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
                           [](td::Result<td::Unit> R) {

@@ -21,6 +21,7 @@
 #include <vector>
 #include <deque>
 #include <functional>
+#include <unordered_set>
 
 #include "interfaces/persistent-state.h"
 #include "td/actor/actor.h"
@@ -195,6 +196,22 @@ struct ValidatorManagerOptions : public td::CntObject {
   virtual void set_collator_node_whitelisted_validator(adnl::AdnlNodeIdShort id, bool add) = 0;
   virtual void set_collator_node_whitelist_enabled(bool enabled) = 0;
   virtual void set_shard_block_verifier_config(td::Ref<ShardBlockVerifierConfig> config) = 0;
+  
+  // IPC configuration getters
+  virtual bool get_ipc_enabled() const = 0;
+  virtual std::string get_ipc_socket_path() const = 0;
+  virtual bool get_ipc_publish_external_messages() const = 0;
+  virtual bool get_ipc_publish_new_blocks() const = 0;
+  virtual bool get_ipc_publish_contract_changes() const = 0;
+  virtual std::unordered_set<std::string> get_ipc_monitored_addresses() const = 0;
+  
+  // IPC configuration setters  
+  virtual void set_ipc_enabled(bool value) = 0;
+  virtual void set_ipc_socket_path(std::string path) = 0;
+  virtual void set_ipc_publish_external_messages(bool value) = 0;
+  virtual void set_ipc_publish_new_blocks(bool value) = 0;
+  virtual void set_ipc_publish_contract_changes(bool value) = 0;
+  virtual void add_ipc_monitored_address(std::string address) = 0;
 
   static td::Ref<ValidatorManagerOptions> create(
       BlockIdExt zero_block_id, BlockIdExt init_block_id,

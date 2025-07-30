@@ -50,6 +50,7 @@ endif()
 option(TON_USE_ROCKSDB "Use \"ON\" to enable RocksDb." ${NOT_TON_ONLY_TONLIB})
 option(TON_USE_ABSEIL "Use \"ON\" to enable Abseil." ${NOT_TON_ONLY_TONLIB})
 option(TON_USE_JEMALLOC "Use \"ON\" to enable JeMalloc." OFF)
+option(TON_IPC_ENABLED "Use \"ON\" to enable IPC publisher for external messages, blocks, and contract state changes." OFF)
 #END internal
 
 option(TONLIB_ENABLE_JNI "Use \"ON\" to enable JNI-compatible TonLib API.")

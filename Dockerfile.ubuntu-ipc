@@ -1,0 +1,53 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    clang \
+    libssl-dev \
+    libz-dev \
+    libreadline-dev \
+    libmicrohttpd-dev \
+    pkg-config \
+    libsecp256k1-dev \
+    libsodium-dev \
+    liblz4-dev \
+    librocksdb-dev \
+    ninja-build \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the source code
+WORKDIR /ton
+COPY . .
+
+# Build with IPC enabled
+RUN mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DTON_IPC_ENABLED=ON -DTON_STATIC=ON && \
+    make -j$(nproc) validator-engine
+
+# Copy the built binary to a known location
+RUN cp /ton/build/validator-engine/validator-engine /validator-engine
+
+# Create a minimal runtime image
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libmicrohttpd12 \
+    libsecp256k1-1 \
+    libsodium23 \
+    liblz4-1 \
+    librocksdb6.11 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=0 /validator-engine /usr/local/bin/validator-engine
+COPY --from=0 /ton/validator/ipc-client-example.py /usr/local/bin/ipc-client-example.py
+
+# Make sure the binary is executable
+RUN chmod +x /usr/local/bin/validator-engine
+
+CMD ["/usr/local/bin/validator-engine"]

@@ -53,3 +53,8 @@ target_include_directories(ton_validator PUBLIC
 
 target_link_libraries(ton_validator PRIVATE tdutils tdactor adnl tl_api tl_lite_api tl-lite-utils dht tdfec
   overlay catchain validatorsession ton_crypto ton_block)
+
+# Add IPC compile definition if enabled
+if(TON_IPC_ENABLED)
+  target_compile_definitions(ton_validator PRIVATE TON_IPC_ENABLED)
+endif()

@@ -19,6 +19,7 @@
 #pragma once
 
 #include "validator/validator.h"
+#include <unordered_set>
 
 namespace ton {
 
@@ -60,6 +61,26 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   }
   bool initial_sync_disabled() const override {
     return initial_sync_disabled_;
+  }
+  
+  // IPC configuration methods
+  bool get_ipc_enabled() const override {
+    return ipc_enabled_;
+  }
+  std::string get_ipc_socket_path() const override {
+    return ipc_socket_path_;
+  }
+  bool get_ipc_publish_external_messages() const override {
+    return ipc_publish_external_messages_;
+  }
+  bool get_ipc_publish_new_blocks() const override {
+    return ipc_publish_new_blocks_;
+  }
+  bool get_ipc_publish_contract_changes() const override {
+    return ipc_publish_contract_changes_;
+  }
+  std::unordered_set<std::string> get_ipc_monitored_addresses() const override {
+    return ipc_monitored_addresses_;
   }
   bool is_hardfork(BlockIdExt block_id) const override {
     if (!block_id.is_valid()) {
@@ -210,6 +231,26 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_initial_sync_disabled(bool value) override {
     initial_sync_disabled_ = value;
   }
+  
+  // IPC configuration setters
+  void set_ipc_enabled(bool value) override {
+    ipc_enabled_ = value;
+  }
+  void set_ipc_socket_path(std::string path) override {
+    ipc_socket_path_ = std::move(path);
+  }
+  void set_ipc_publish_external_messages(bool value) override {
+    ipc_publish_external_messages_ = value;
+  }
+  void set_ipc_publish_new_blocks(bool value) override {
+    ipc_publish_new_blocks_ = value;
+  }
+  void set_ipc_publish_contract_changes(bool value) override {
+    ipc_publish_contract_changes_ = value;
+  }
+  void add_ipc_monitored_address(std::string address) override {
+    ipc_monitored_addresses_.insert(std::move(address));
+  }
   void set_hardforks(std::vector<BlockIdExt> vec) override {
     hardforks_ = std::move(vec);
   }
@@ -331,6 +372,15 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   double archive_ttl_;
   double key_proof_ttl_;
   bool initial_sync_disabled_;
+  
+  // IPC configuration
+  bool ipc_enabled_ = false;
+  std::string ipc_socket_path_ = "/tmp/ton-ipc.sock";
+  bool ipc_publish_external_messages_ = true;
+  bool ipc_publish_new_blocks_ = true;
+  bool ipc_publish_contract_changes_ = true;
+  std::unordered_set<std::string> ipc_monitored_addresses_;
+  
   std::vector<BlockIdExt> hardforks_;
   std::set<CatchainSeqno> unsafe_catchains_;
   std::map<CatchainSeqno, std::pair<BlockSeqno, td::uint32>> unsafe_catchain_rotates_;

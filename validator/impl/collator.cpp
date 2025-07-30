@@ -37,6 +37,9 @@
 #include "top-shard-descr.hpp"
 #include <ctime>
 #include "td/utils/Random.h"
+#ifdef TON_IPC_ENABLED
+#include "../ipc-publisher.hpp"
+#endif
 
 namespace ton {
 
@@ -3004,6 +3007,24 @@ bool Collator::combine_account_transactions() {
       // update account_dict
       if (acc.total_state->get_hash() != acc.orig_total_state->get_hash()) {
         // account changed
+#ifdef TON_IPC_ENABLED
+        // IPC hook for contract state changes
+        if (auto* publisher = IPCPublisher::instance()) {
+          std::string old_hash = acc.orig_total_state.not_null() ? acc.orig_total_state->get_hash().to_hex() : "";
+          std::string new_hash = acc.total_state->get_hash().to_hex();
+          // Create a temporary BlockIdExt with the new block ID (root hash will be filled later)
+          BlockIdExt temp_block_id{new_id, RootHash::zero(), FileHash::zero()};
+          // For now, just use address 0 as prefix - we'll filter by full address string
+          publisher->publish_contract_state_change(
+            AccountIdPrefixFull{workchain(), 0},
+            acc.addr.to_hex(), 
+            old_hash, 
+            new_hash, 
+            temp_block_id, 
+            acc.last_trans_lt_
+          );
+        }
+#endif
         if (acc.orig_status == block::Account::acc_nonexist) {
           // account created
           CHECK(acc.status != block::Account::acc_nonexist);
