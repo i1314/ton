@@ -65,19 +65,36 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   
   // IPC configuration methods
   bool get_ipc_enabled() const override {
-    return ipc_enabled_;
+#ifdef TON_IPC_ENABLED
+    // Default to true when compiled with IPC support
+    return true;
+#else
+    return false;
+#endif
   }
   std::string get_ipc_socket_path() const override {
-    return ipc_socket_path_;
+    return ipc_socket_path_.empty() ? "/tmp/ton-ipc.sock" : ipc_socket_path_;
   }
   bool get_ipc_publish_external_messages() const override {
-    return ipc_publish_external_messages_;
+#ifdef TON_IPC_ENABLED
+    return true;  // Default enabled
+#else
+    return false;
+#endif
   }
   bool get_ipc_publish_new_blocks() const override {
-    return ipc_publish_new_blocks_;
+#ifdef TON_IPC_ENABLED
+    return true;  // Default enabled
+#else
+    return false;
+#endif
   }
   bool get_ipc_publish_contract_changes() const override {
-    return ipc_publish_contract_changes_;
+#ifdef TON_IPC_ENABLED
+    return true;  // Default enabled
+#else
+    return false;
+#endif
   }
   std::unordered_set<std::string> get_ipc_monitored_addresses() const override {
     return ipc_monitored_addresses_;
