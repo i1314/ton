@@ -221,6 +221,15 @@ void ValidatorManagerImpl::new_block_broadcast(BlockBroadcast broadcast, td::Pro
     promise.set_error(td::Status::Error(ErrorCode::notready, "node not started"));
     return;
   }
+  
+#ifdef TON_IPC_ENABLED
+  // IPC hook for new blocks in ValidatorManager
+  LOG(INFO) << "[IPC] ValidatorManager::new_block_broadcast called for block " << broadcast.block_id.to_str();
+  if (auto* publisher = IPCPublisher::instance()) {
+    LOG(INFO) << "[IPC] Publishing new block from ValidatorManager";
+    publisher->publish_new_block(broadcast.block_id, td::Ref<BlockData>());
+  }
+#endif
   if (!need_monitor(broadcast.block_id.shard_full())) {
     promise.set_error(td::Status::Error("not monitoring shard"));
     return;
@@ -1824,8 +1833,12 @@ void ValidatorManagerImpl::send_external_message(td::Ref<ExtMessage> message) {
   
   // IPC hook for external messages
 #ifdef TON_IPC_ENABLED
+  LOG(INFO) << "[IPC] send_external_message called";
   if (auto* publisher = IPCPublisher::instance()) {
+    LOG(INFO) << "[IPC] Publishing external message event";
     publisher->publish_external_message(message);
+  } else {
+    LOG(WARNING) << "[IPC] Publisher instance is null";
   }
 #endif
   

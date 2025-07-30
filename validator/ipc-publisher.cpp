@@ -51,9 +51,12 @@ IPCPublisher* IPCPublisher::instance() {
 }
 
 void IPCPublisher::start_up() {
+  LOG(INFO) << "[IPC] IPCPublisher::start_up() called";
   if (!config_.enabled) {
+    LOG(WARNING) << "[IPC] IPC is disabled in config";
     return;
   }
+  LOG(INFO) << "[IPC] IPC is enabled, initializing socket at " << config_.socket_path;
 
   // Create Unix domain socket
   socket_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -89,7 +92,10 @@ void IPCPublisher::start_up() {
     return;
   }
 
-  LOG(INFO) << "IPC publisher started on " << config_.socket_path;
+  LOG(INFO) << "[IPC] Publisher started successfully on " << config_.socket_path;
+  LOG(INFO) << "[IPC] Config: external_messages=" << config_.publish_external_messages 
+            << " new_blocks=" << config_.publish_new_blocks
+            << " contract_changes=" << config_.publish_contract_changes;
   
   running_ = true;
   worker_thread_ = std::make_unique<std::thread>(&IPCPublisher::worker_thread, this);
@@ -208,7 +214,9 @@ void IPCPublisher::publish_external_message(td::Ref<ExtMessage> message) {
 }
 
 void IPCPublisher::publish_new_block(BlockIdExt block_id, td::Ref<BlockData> block) {
+  LOG(DEBUG) << "[IPC] publish_new_block called for " << block_id.to_str();
   if (!config_.enabled || !config_.publish_new_blocks) {
+    LOG(DEBUG) << "[IPC] Skipping: enabled=" << config_.enabled << " publish_new_blocks=" << config_.publish_new_blocks;
     return;
   }
 

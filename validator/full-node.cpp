@@ -638,8 +638,12 @@ void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
   // IPC hook for new blocks - called as soon as received from network
 #ifdef TON_IPC_ENABLED
+  LOG(INFO) << "[IPC] process_block_broadcast called for block " << broadcast.block_id.to_str();
   if (auto* publisher = IPCPublisher::instance()) {
+    LOG(INFO) << "[IPC] Publishing new block event";
     publisher->publish_new_block(broadcast.block_id, td::Ref<BlockData>());
+  } else {
+    LOG(WARNING) << "[IPC] Publisher instance is null";
   }
 #endif
   
