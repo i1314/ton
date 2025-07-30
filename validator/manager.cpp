@@ -1958,7 +1958,9 @@ void ValidatorManagerImpl::start_up() {
 
 #ifdef TON_IPC_ENABLED
   // Initialize IPC publisher if configured
+  LOG(ERROR) << "[IPC] TON_IPC_ENABLED is defined, checking if IPC should be enabled";
   if (opts_->get_ipc_enabled()) {
+    LOG(ERROR) << "[IPC] IPC is enabled in options, initializing publisher";
     IPCPublisher::IPCConfig ipc_config;
     ipc_config.enabled = true;
     ipc_config.socket_path = opts_->get_ipc_socket_path();
@@ -1974,8 +1976,12 @@ void ValidatorManagerImpl::start_up() {
     auto publisher = td::actor::create_actor<IPCPublisher>("ipc-publisher", std::move(ipc_config));
     publisher.release();
     
-    LOG(INFO) << "IPC publisher initialized on " << ipc_config.socket_path;
+    LOG(ERROR) << "[IPC] IPC publisher initialized on " << ipc_config.socket_path;
+  } else {
+    LOG(ERROR) << "[IPC] IPC is disabled in options";
   }
+#else
+  LOG(ERROR) << "[IPC] TON_IPC_ENABLED is NOT defined - IPC support not compiled in";
 #endif
 
   auto Q =
