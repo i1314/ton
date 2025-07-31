@@ -290,11 +290,13 @@ private:
         writeString(block.block_id);
         
         size_t pos = data.size();
-        data.resize(pos + sizeof(uint32_t) * 4);
+        data.resize(pos + sizeof(uint32_t) * 4 + sizeof(uint8_t));
         memcpy(data.data() + pos, &block.gen_utime, sizeof(uint32_t));
         memcpy(data.data() + pos + sizeof(uint32_t), &block.delay_seconds, sizeof(uint32_t));
         memcpy(data.data() + pos + 2 * sizeof(uint32_t), &block.account_count, sizeof(uint32_t));
         memcpy(data.data() + pos + 3 * sizeof(uint32_t), &block.transaction_count, sizeof(uint32_t));
+        uint8_t has_raw = block.has_raw_data ? 1 : 0;
+        memcpy(data.data() + pos + 4 * sizeof(uint32_t), &has_raw, sizeof(uint8_t));
         
         // Transaction hashes
         uint32_t tx_count = block.transaction_hashes.size();
@@ -304,6 +306,15 @@ private:
         
         for (const auto& hash : block.transaction_hashes) {
             writeString(hash);
+        }
+        
+        // Raw block data if available
+        if (block.has_raw_data) {
+            uint32_t raw_size = block.raw_block_data.size();
+            pos = data.size();
+            data.resize(pos + sizeof(uint32_t) + raw_size);
+            memcpy(data.data() + pos, &raw_size, sizeof(uint32_t));
+            memcpy(data.data() + pos + sizeof(uint32_t), block.raw_block_data.data(), raw_size);
         }
         
         return data;

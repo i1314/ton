@@ -29,9 +29,7 @@
 #include "block/block-parse.h"
 #include "block/block-auto.h"
 
-#ifdef TON_IPC_ENABLED
 #include "ipc-service/ton_node_hooks.h"
-#endif
 #include "vm/cells/MerkleProof.h"
 
 namespace ton {
@@ -740,19 +738,21 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                 }
                 
                 // IPC hook for new blocks
-                #ifdef TON_IPC_ENABLED
-                std::vector<std::string> tx_hashes;
-                for (const auto& tx : tx_info) {
-                  // Extract hash from format "1/5 addr=... hash=... lt=..."
-                  auto hash_pos = tx.find("hash=");
-                  auto lt_pos = tx.find(" lt=");
-                  if (hash_pos != std::string::npos && lt_pos != std::string::npos) {
-                    tx_hashes.push_back(tx.substr(hash_pos + 5, lt_pos - (hash_pos + 5)));
+                try {
+                  std::vector<std::string> tx_hashes;
+                  for (const auto& tx : tx_info) {
+                    // Extract hash from format "1/5 addr=... hash=... lt=..."
+                    auto hash_pos = tx.find("hash=");
+                    auto lt_pos = tx.find(" lt=");
+                    if (hash_pos != std::string::npos && lt_pos != std::string::npos) {
+                      tx_hashes.push_back(tx.substr(hash_pos + 5, lt_pos - (hash_pos + 5)));
+                    }
                   }
+                  ton_ipc_hooks::hookNewBlockWithData(broadcast.block_id.to_str(), gen_utime, delay, 
+                                             account_count, tx_count, tx_hashes, broadcast.data);
+                } catch (...) {
+                  // Ignore IPC errors to not affect node operation
                 }
-                ton_ipc_hooks::hookNewBlock(broadcast.block_id.to_str(), gen_utime, delay, 
-                                           account_count, tx_count, tx_hashes);
-                #endif
               } else {
                 LOG(ERROR) << "  No account blocks in this block";
               }

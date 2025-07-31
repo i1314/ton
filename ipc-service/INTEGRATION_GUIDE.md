@@ -34,60 +34,58 @@ cd ipc-service
 Add to `validator/CMakeLists.txt`:
 
 ```cmake
-# Add IPC service
-add_subdirectory(../ipc-service ipc-service)
+# Add IPC service (now included by default)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ipc-service ${CMAKE_CURRENT_BINARY_DIR}/ipc-service)
 target_link_libraries(validator-engine PUBLIC ton_ipc)
 ```
 
-### 2. Initialize IPC Service
+### 2. Automatic Initialization
 
-In `validator/validator-engine.cpp`, add at startup:
+**No manual initialization needed!** The IPC service automatically starts on first use.
 
+The service will:
+- Auto-start when the first message is sent
+- Auto-stop when the process exits
+- Use default socket path `/tmp/ton-ipc.sock`
+
+Optional: You can still manually control the service if needed:
 ```cpp
-#include "ipc-service/ton_node_hooks.h"
+// Optional: custom initialization
+ton_ipc_hooks::initializeIPCService("/custom/path.sock");
 
-// In run() method, after other initializations:
-if (!ton_ipc_hooks::initializeIPCService()) {
-    LOG(WARNING) << "Failed to start IPC service";
-}
-
-// In destructor or shutdown:
+// Optional: manual shutdown
 ton_ipc_hooks::shutdownIPCService();
 ```
 
-### 3. Hook External Messages
+### 3. Hooks Already Integrated!
 
-In `validator/full-node-shard.cpp` at line ~833 (after EXT_MSG_RECEIVED log):
+The hooks are already added to the TON node code:
 
+**External Messages** (in `validator/full-node-shard.cpp`):
 ```cpp
-#include "ipc-service/ton_node_hooks.h"
-
-// After the existing LOG(WARNING) for EXT_MSG_RECEIVED:
-ton_ipc_hooks::hookExternalMessage(
-    src,                                    // source address
-    dest_addr,                              // destination address  
-    query.message_->data_,                  // message data
-    ""                                      // hash (optional)
-);
+// Already integrated - captures all external messages
+try {
+  ton_ipc_hooks::hookExternalMessage(src, dest_addr, query.message_->data_, "");
+} catch (...) {
+  // Errors are ignored to not affect node operation
+}
 ```
 
-### 4. Hook New Blocks
-
-In `validator/full-node.cpp` at line ~735 (after block parsing):
-
+**New Blocks** (in `validator/full-node.cpp`):
 ```cpp
-#include "ipc-service/ton_node_hooks.h"
-
-// After successfully parsing block data:
-ton_ipc_hooks::hookNewBlock(
-    broadcast.block_id.to_str(),            // block ID
-    gen_utime,                              // generation time
-    delay,                                  // delay in seconds
-    account_count,                          // number of accounts
-    tx_count,                               // number of transactions
-    tx_info                                 // transaction hashes (first 5)
-);
+// Already integrated - captures all new blocks with full data
+try {
+  ton_ipc_hooks::hookNewBlockWithData(
+    broadcast.block_id.to_str(), gen_utime, delay, 
+    account_count, tx_count, tx_hashes, 
+    broadcast.data  // Full block data
+  );
+} catch (...) {
+  // Errors are ignored to not affect node operation
+}
 ```
+
+No additional code changes needed!
 
 ## Go Client Usage
 

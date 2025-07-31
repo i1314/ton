@@ -66,6 +66,8 @@ type BlockInfo struct {
 	AccountCount      uint32
 	TransactionCount  uint32
 	TransactionHashes []string
+	RawBlockData      []byte  // Complete raw block data
+	HasRawData        bool
 }
 
 // Client represents a TON IPC client
@@ -337,6 +339,13 @@ func (c *Client) parseBlockInfo(data []byte) (*BlockInfo, error) {
 		return nil, err
 	}
 	
+	// Read has_raw_data flag
+	var hasRaw uint8
+	if err := binary.Read(buf, binary.LittleEndian, &hasRaw); err != nil {
+		return nil, err
+	}
+	block.HasRawData = hasRaw != 0
+	
 	// Read transaction hashes
 	var txCount uint32
 	if err := binary.Read(buf, binary.LittleEndian, &txCount); err != nil {
@@ -350,6 +359,14 @@ func (c *Client) parseBlockInfo(data []byte) (*BlockInfo, error) {
 			return nil, err
 		}
 		block.TransactionHashes = append(block.TransactionHashes, hash)
+	}
+	
+	// Read raw block data if available
+	if block.HasRawData {
+		block.RawBlockData, err = readBytes(buf)
+		if err != nil {
+			return nil, err
+		}
 	}
 	
 	return block, nil

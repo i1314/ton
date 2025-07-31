@@ -59,7 +59,8 @@ struct BlockData {
     uint32_t account_count;
     uint32_t transaction_count;
     std::vector<std::string> transaction_hashes;  // First 5 transactions
-    std::vector<uint8_t> raw_data;  // Optional: raw block data
+    std::vector<uint8_t> raw_block_data;  // Complete raw block data
+    bool has_raw_data = false;
 };
 
 class IPCService {
