@@ -12,6 +12,7 @@
 #include <cstring>
 #include <iostream>
 #include <errno.h>
+#include <netinet/tcp.h>
 
 namespace ton_ipc {
 
@@ -61,6 +62,12 @@ bool IPCChannel::start() {
     int bufsize = 32 * 1024 * 1024;
     setsockopt(server_fd_, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
     setsockopt(server_fd_, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(bufsize));
+    
+#ifdef __APPLE__
+    // macOS: Disable SIGPIPE on socket
+    int no_sigpipe = 1;
+    setsockopt(server_fd_, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
+#endif
     
     // Remove existing socket file
     unlink(socket_path_.c_str());
@@ -145,6 +152,15 @@ void IPCChannel::acceptLoop() {
         // Set large send buffer
         int bufsize = 32 * 1024 * 1024;
         setsockopt(client_fd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(bufsize));
+        
+        // Disable Nagle's algorithm for lower latency
+        int one = 1;
+        setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+        
+#ifdef __linux__
+        // Linux: Enable TCP_QUICKACK for lower latency
+        setsockopt(client_fd, IPPROTO_TCP, TCP_QUICKACK, &one, sizeof(one));
+#endif
         
         // Add client
         {

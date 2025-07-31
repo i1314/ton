@@ -34,8 +34,9 @@ func main() {
 				fmt.Printf("First external message received:\n")
 				fmt.Printf("  Timestamp: %d ns\n", timestamp)
 				fmt.Printf("  Size: %d bytes\n", len(data))
-				latencyNs := time.Now().UnixNano() - int64(timestamp)
-				fmt.Printf("  Latency: %.3f µs\n", float64(latencyNs)/1000.0)
+				// Timestamp is from high_resolution_clock, not Unix epoch
+				// Just show current latency check
+				fmt.Printf("  Latency check: message received\n")
 				if len(data) > 32 {
 					fmt.Printf("  Data preview: %s...\n", hex.EncodeToString(data[:32]))
 				} else {
@@ -53,8 +54,9 @@ func main() {
 				fmt.Printf("\nFirst block received:\n")
 				fmt.Printf("  Timestamp: %d ns\n", timestamp)
 				fmt.Printf("  Size: %d bytes\n", len(data))
-				latencyNs := time.Now().UnixNano() - int64(timestamp)
-				fmt.Printf("  Latency: %.3f µs\n", float64(latencyNs)/1000.0)
+				// Timestamp is from high_resolution_clock, not Unix epoch
+				// Just show current latency check
+				fmt.Printf("  Latency check: message received\n")
 			}
 		},
 	)
@@ -92,17 +94,10 @@ func main() {
 			fmt.Printf("Total bytes: %d (%.1f MB/s)\n", bytes, float64(bytes)/runtime/1024/1024)
 
 			// Get per-channel stats
-			extStats, extBytes, extLastNs := client.GetExternalMessageClient().GetStats()
-			blockStats, blockBytes, blockLastNs := client.GetBlockClient().GetStats()
+			extStats, extBytes, _ := client.GetExternalMessageClient().GetStats()
+			blockStats, blockBytes, _ := client.GetBlockClient().GetStats()
 
-			if extLastNs > 0 {
-				extLatency := float64(time.Now().UnixNano()-int64(extLastNs)) / 1000.0
-				fmt.Printf("Ext msg latency: %.1f µs\n", extLatency)
-			}
-			if blockLastNs > 0 {
-				blockLatency := float64(time.Now().UnixNano()-int64(blockLastNs)) / 1000.0
-				fmt.Printf("Block latency: %.1f µs\n", blockLatency)
-			}
+			// Latency tracking removed due to non-Unix epoch timestamps
 
 			// Verify stats match
 			if extStats != extMsg || blockStats != blocks {
