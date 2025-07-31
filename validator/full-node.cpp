@@ -671,25 +671,26 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
             int tx_count = 0;
             int tx_shown = 0;
             
-            account_blocks.scan_account_transactions(
-              [&](block::ShardAccountBlocks::trans_series_desc_t& series_desc) -> bool {
-                auto& trans_dict = series_desc.trans_dict;
-                trans_dict->check_for_each([&](td::Ref<vm::CellSlice> value, td::ConstBitPtr key, int key_len) -> bool {
-                  tx_count++;
-                  if (tx_shown < 5) {
-                    tx_shown++;
-                    block::gen::Transaction::Record trans;
-                    if (tlb::unpack_cell(value->prefetch_ref(), trans)) {
-                      std::string lt_str = trans.lt.to_dec_string();
-                      auto addr = series_desc.addr.to_hex();
-                      auto hash = value->prefetch_ref()->get_hash().to_hex();
-                      tx_info.push_back(PSTRING() << tx_shown << "/" << "?" << " addr=" << addr << " hash=" << hash << " lt=" << lt_str);
-                    }
+            account_blocks.scan_account_blocks([&](const block::CurrencyCollection& balance,
+                                                   const block::ShardAccountBlocks::value_type& acc_blk) -> bool {
+              auto& acc_addr = acc_blk.first;
+              auto& trans_dict = acc_blk.second->transactions_;
+              trans_dict->check_for_each([&](td::Ref<vm::CellSlice> value, td::ConstBitPtr key, int key_len) -> bool {
+                tx_count++;
+                if (tx_shown < 5) {
+                  tx_shown++;
+                  block::gen::Transaction::Record trans;
+                  if (tlb::unpack_cell(value->prefetch_ref(), trans)) {
+                    std::string lt_str = trans.lt.to_dec_string();
+                    auto addr = acc_addr.to_hex();
+                    auto hash = value->prefetch_ref()->get_hash().to_hex();
+                    tx_info.push_back(PSTRING() << tx_shown << "/" << "?" << " addr=" << addr << " hash=" << hash << " lt=" << lt_str);
                   }
-                  return true;
-                });
+                }
                 return true;
               });
+              return true;
+            });
             
             // Update tx_info with total count
             for (auto& info : tx_info) {
