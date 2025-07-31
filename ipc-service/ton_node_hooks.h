@@ -9,6 +9,8 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <cstdlib>
+#include "td/utils/buffer.h"
 
 namespace ton_ipc_hooks {
 
@@ -49,7 +51,7 @@ inline void shutdownIPCService() {
 // Hook for external messages in full-node-shard.cpp
 inline void hookExternalMessage(const std::string& source, 
                                const std::string& dest,
-                               const std::vector<uint8_t>& data,
+                               const td::BufferSlice& data,
                                const std::string& hash = "") {
     static AutoInit auto_init;  // Ensure service is started
     
@@ -58,7 +60,7 @@ inline void hookExternalMessage(const std::string& source,
         std::chrono::system_clock::now().time_since_epoch()).count();
     msg.source_addr = source;
     msg.dest_addr = dest;
-    msg.data = data;
+    msg.data = std::vector<uint8_t>(data.data(), data.data() + data.size());
     msg.hash = hash;
     
     ton_ipc::getIPCService().onExternalMessage(msg);
@@ -100,7 +102,7 @@ inline void hookNewBlockWithData(const std::string& block_id,
     block.account_count = account_count;
     block.transaction_count = transaction_count;
     block.transaction_hashes = tx_hashes;
-    block.raw_block_data = std::vector<uint8_t>(raw_data.begin(), raw_data.end());
+    block.raw_block_data = std::vector<uint8_t>(raw_data.data(), raw_data.data() + raw_data.size());
     block.has_raw_data = true;
     
     ton_ipc::getIPCService().onNewBlock(block);

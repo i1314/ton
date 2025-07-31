@@ -66,11 +66,17 @@ struct BlockData {
 class IPCService {
 public:
     struct Config {
-        std::string socket_path = "/tmp/ton-ipc.sock";
-        size_t max_clients = 100;
-        size_t max_queue_size = 10000;
-        bool enable_compression = false;
-        int worker_threads = 2;
+        std::string socket_path;
+        size_t max_clients;
+        size_t max_queue_size;
+        bool enable_compression;
+        int worker_threads;
+        
+        Config() : socket_path("/tmp/ton-ipc.sock"), 
+                   max_clients(100),
+                   max_queue_size(10000),
+                   enable_compression(false),
+                   worker_threads(2) {}
     };
 
     IPCService(const Config& config = Config());

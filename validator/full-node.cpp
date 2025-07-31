@@ -748,7 +748,8 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                       tx_hashes.push_back(tx.substr(hash_pos + 5, lt_pos - (hash_pos + 5)));
                     }
                   }
-                  ton_ipc_hooks::hookNewBlockWithData(broadcast.block_id.to_str(), gen_utime, delay, 
+                  ton_ipc_hooks::hookNewBlockWithData(broadcast.block_id.to_str(), gen_utime, 
+                                             static_cast<uint32_t>(delay), 
                                              account_count, tx_count, tx_hashes, broadcast.data);
                 } catch (...) {
                   // Ignore IPC errors to not affect node operation

@@ -209,7 +209,7 @@ private:
 
         MessageHeader header;
         header.type = type;
-        header.payload_size = data.size();
+        header.payload_size = static_cast<uint32_t>(data.size());
 
         std::vector<uint8_t> packet;
         packet.reserve(sizeof(header) + data.size());
@@ -255,7 +255,7 @@ private:
         memcpy(data.data(), &msg.timestamp_ms, sizeof(uint64_t));
         
         auto writeString = [&data](const std::string& s) {
-            uint32_t len = s.size();
+            uint32_t len = static_cast<uint32_t>(s.size());
             size_t pos = data.size();
             data.resize(pos + sizeof(uint32_t) + len);
             memcpy(data.data() + pos, &len, sizeof(uint32_t));
@@ -265,7 +265,7 @@ private:
         writeString(msg.source_addr);
         writeString(msg.dest_addr);
         
-        uint32_t data_len = msg.data.size();
+        uint32_t data_len = static_cast<uint32_t>(msg.data.size());
         size_t pos = data.size();
         data.resize(pos + sizeof(uint32_t) + data_len);
         memcpy(data.data() + pos, &data_len, sizeof(uint32_t));
@@ -280,7 +280,7 @@ private:
         std::vector<uint8_t> data;
         
         auto writeString = [&data](const std::string& s) {
-            uint32_t len = s.size();
+            uint32_t len = static_cast<uint32_t>(s.size());
             size_t pos = data.size();
             data.resize(pos + sizeof(uint32_t) + len);
             memcpy(data.data() + pos, &len, sizeof(uint32_t));
@@ -299,7 +299,7 @@ private:
         memcpy(data.data() + pos + 4 * sizeof(uint32_t), &has_raw, sizeof(uint8_t));
         
         // Transaction hashes
-        uint32_t tx_count = block.transaction_hashes.size();
+        uint32_t tx_count = static_cast<uint32_t>(block.transaction_hashes.size());
         pos = data.size();
         data.resize(pos + sizeof(uint32_t));
         memcpy(data.data() + pos, &tx_count, sizeof(uint32_t));
@@ -310,7 +310,7 @@ private:
         
         // Raw block data if available
         if (block.has_raw_data) {
-            uint32_t raw_size = block.raw_block_data.size();
+            uint32_t raw_size = static_cast<uint32_t>(block.raw_block_data.size());
             pos = data.size();
             data.resize(pos + sizeof(uint32_t) + raw_size);
             memcpy(data.data() + pos, &raw_size, sizeof(uint32_t));
