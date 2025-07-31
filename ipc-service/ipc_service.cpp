@@ -13,6 +13,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cstring>
+#include <errno.h>
 
 namespace ton_ipc {
 
@@ -29,12 +30,16 @@ public:
 
     bool start() {
         if (running_.exchange(true)) {
+            std::cerr << "[IPC] Service already running" << std::endl;
             return false; // Already running
         }
+
+        std::cerr << "[IPC] Starting IPC service on " << config_.socket_path << std::endl;
 
         // Create Unix domain socket
         server_fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
         if (server_fd_ < 0) {
+            std::cerr << "[IPC] Failed to create socket: " << strerror(errno) << std::endl;
             running_ = false;
             return false;
         }
@@ -68,6 +73,8 @@ public:
         // Start acceptor thread
         acceptor_thread_ = std::thread(&Impl::acceptorLoop, this);
 
+        std::cerr << "[IPC] Service started successfully with " << config_.worker_threads 
+                  << " worker threads" << std::endl;
         return true;
     }
 
@@ -112,16 +119,30 @@ public:
     }
 
     void onExternalMessage(const ExternalMessageData& msg, Stats& stats) {
-        if (!running_) return;
+        if (!running_) {
+            std::cerr << "[IPC] Service not running, dropping external message" << std::endl;
+            return;
+        }
 
+        std::cerr << "[IPC] External message received: from=" << msg.source_addr 
+                  << " to=" << msg.dest_addr 
+                  << " size=" << msg.data.size() << std::endl;
+        
         auto data = serializeExternalMessage(msg);
         enqueueMessage(MessageType::EXTERNAL_MESSAGE, std::move(data), stats);
         stats.messages_sent++;
     }
 
     void onNewBlock(const BlockData& block, Stats& stats) {
-        if (!running_) return;
+        if (!running_) {
+            std::cerr << "[IPC] Service not running, dropping block" << std::endl;
+            return;
+        }
 
+        std::cerr << "[IPC] New block received: id=" << block.block_id 
+                  << " accounts=" << block.account_count
+                  << " txs=" << block.transaction_count << std::endl;
+        
         auto data = serializeBlock(block);
         enqueueMessage(MessageType::NEW_BLOCK, std::move(data), stats);
         stats.blocks_sent++;
@@ -160,6 +181,7 @@ private:
             {
                 std::lock_guard<std::mutex> lock(clients_mutex_);
                 if (clients_.size() >= config_.max_clients) {
+                    std::cerr << "[IPC] Max clients reached, rejecting connection" << std::endl;
                     close(client_fd);
                     continue;
                 }
@@ -169,8 +191,71 @@ private:
                 client.subscriptions = 0;
                 client.last_activity = std::chrono::steady_clock::now();
                 clients_.push_back(client);
+                
+                std::cerr << "[IPC] Client connected, fd=" << client_fd 
+                          << ", total clients=" << clients_.size() << std::endl;
+                
+                // Start client handler thread
+                std::thread(&Impl::handleClient, this, client_fd).detach();
             }
         }
+    }
+
+    void handleClient(int client_fd) {
+        std::cerr << "[IPC] Client handler started for fd=" << client_fd << std::endl;
+        
+        while (running_) {
+            MessageHeader header;
+            ssize_t n = recv(client_fd, &header, sizeof(header), MSG_WAITALL);
+            
+            if (n != sizeof(header)) {
+                if (n == 0) {
+                    std::cerr << "[IPC] Client disconnected, fd=" << client_fd << std::endl;
+                } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                    std::cerr << "[IPC] Client read error, fd=" << client_fd << ": " << strerror(errno) << std::endl;
+                }
+                break;
+            }
+            
+            // Validate header
+            if (header.magic != 0x544F4E30 || header.version != 1) {
+                std::cerr << "[IPC] Invalid header from client fd=" << client_fd << std::endl;
+                break;
+            }
+            
+            // Handle subscription
+            if (header.type == MessageType::SUBSCRIBE) {
+                if (header.payload_size == 4) {
+                    uint32_t subscription_type;
+                    if (recv(client_fd, &subscription_type, 4, MSG_WAITALL) == 4) {
+                        std::lock_guard<std::mutex> lock(clients_mutex_);
+                        for (auto& client : clients_) {
+                            if (client.fd == client_fd) {
+                                client.subscriptions = subscription_type;
+                                std::cerr << "[IPC] Client fd=" << client_fd 
+                                          << " subscribed to types=" << subscription_type << std::endl;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Skip other message types for now
+            else if (header.payload_size > 0) {
+                std::vector<uint8_t> payload(header.payload_size);
+                recv(client_fd, payload.data(), header.payload_size, MSG_WAITALL);
+            }
+        }
+        
+        // Remove client
+        {
+            std::lock_guard<std::mutex> lock(clients_mutex_);
+            clients_.erase(std::remove_if(clients_.begin(), clients_.end(),
+                                         [client_fd](const Client& c) { return c.fd == client_fd; }),
+                          clients_.end());
+            std::cerr << "[IPC] Client removed, fd=" << client_fd << std::endl;
+        }
+        close(client_fd);
     }
 
     void workerLoop() {

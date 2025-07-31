@@ -20,6 +20,7 @@ public:
     AutoInit() {
         static bool initialized = false;
         if (!initialized) {
+            std::cerr << "[IPC] AutoInit: Starting IPC service..." << std::endl;
             ton_ipc::IPCService::Config config;
             config.socket_path = "/tmp/ton-ipc.sock";
             config.max_clients = 100;
@@ -28,10 +29,14 @@ public:
             
             if (ton_ipc::getIPCService().start()) {
                 initialized = true;
+                std::cerr << "[IPC] AutoInit: IPC service started successfully" << std::endl;
                 // Register cleanup on exit
                 std::atexit([]() {
+                    std::cerr << "[IPC] AutoInit: Stopping IPC service..." << std::endl;
                     ton_ipc::getIPCService().stop();
                 });
+            } else {
+                std::cerr << "[IPC] AutoInit: Failed to start IPC service!" << std::endl;
             }
         }
     }
@@ -54,6 +59,9 @@ inline void hookExternalMessage(const std::string& source,
                                const td::BufferSlice& data,
                                const std::string& hash = "") {
     static AutoInit auto_init;  // Ensure service is started
+    
+    std::cerr << "[IPC Hook] External message hook called: from=" << source 
+              << " to=" << dest << " size=" << data.size() << std::endl;
     
     ton_ipc::ExternalMessageData msg;
     msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -94,6 +102,10 @@ inline void hookNewBlockWithData(const std::string& block_id,
                                 const std::vector<std::string>& tx_hashes,
                                 const td::BufferSlice& raw_data) {
     static AutoInit auto_init;  // Ensure service is started
+    
+    std::cerr << "[IPC Hook] New block hook called: id=" << block_id 
+              << " accounts=" << account_count 
+              << " txs=" << transaction_count << std::endl;
     
     ton_ipc::BlockData block;
     block.block_id = block_id;

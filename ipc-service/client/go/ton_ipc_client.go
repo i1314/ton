@@ -176,9 +176,13 @@ func (c *Client) Subscribe(types SubscriptionType) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
+	fmt.Printf("[Client] Sending subscribe request, types=%d, size=%d bytes\n", types, buf.Len())
+	
 	if _, err := c.conn.Write(buf.Bytes()); err != nil {
 		return err
 	}
+	
+	fmt.Printf("[Client] Subscribe request sent successfully\n")
 	
 	return nil
 }
