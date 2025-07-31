@@ -226,7 +226,8 @@ func (c *Client) receiveLoop() {
 		}
 		
 		// Set read deadline to allow periodic context checks
-		c.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		// Use 5 seconds timeout to avoid frequent timeouts
+		c.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		
 		header := MessageHeader{}
 		if err := binary.Read(c.conn, binary.LittleEndian, &header); err != nil {
@@ -250,11 +251,30 @@ func (c *Client) receiveLoop() {
 			return
 		}
 		
+		// Validate payload size to prevent excessive memory allocation
+		if header.PayloadSize > 10*1024*1024 { // 10MB limit
+			c.handleError(fmt.Errorf("payload too large: %d bytes", header.PayloadSize))
+			return
+		}
+		
 		// Read payload
 		payload := make([]byte, header.PayloadSize)
 		if _, err := io.ReadFull(c.conn, payload); err != nil {
-			c.handleError(fmt.Errorf("failed to read payload: %w", err))
-			return
+			// Handle timeout specially - it might occur between header and payload
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				// This shouldn't happen often, but if it does, we need to handle it
+				// Try to read the remaining payload without deadline
+				c.conn.SetReadDeadline(time.Time{})
+				if _, err := io.ReadFull(c.conn, payload); err != nil {
+					c.handleError(fmt.Errorf("failed to read payload after timeout: %w", err))
+					return
+				}
+				// Restore deadline for next iteration
+				c.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			} else {
+				c.handleError(fmt.Errorf("failed to read payload: %w", err))
+				return
+			}
 		}
 		
 		// Process message
