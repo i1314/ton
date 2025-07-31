@@ -1,157 +1,167 @@
 /*
-    Test server for TON IPC Service
+    Test server for Fast IPC
+    Simulates TON node sending messages
 */
 
-#include "../ipc_service.h"
+#include "../include/fast_ipc.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <random>
 #include <signal.h>
-#include <sstream>
-#include <iomanip>
+#include <cstring>
+#include <vector>
 
 std::atomic<bool> running{true};
 
-void signalHandler(int) {
+void signalHandler(int sig) {
+    std::cout << "\nShutting down..." << std::endl;
     running = false;
 }
 
-std::string generateRandomHex(size_t length) {
-    static const char hex_chars[] = "0123456789abcdef";
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_int_distribution<> dis(0, 15);
+// Generate test external message
+std::vector<uint8_t> generateExternalMessage(size_t size) {
+    std::vector<uint8_t> data(size);
     
-    std::string result;
-    result.reserve(length);
-    for (size_t i = 0; i < length; ++i) {
-        result += hex_chars[dis(gen)];
-    }
-    return result;
-}
-
-std::string generateAddress() {
-    std::stringstream ss;
-    ss << "0:" << generateRandomHex(64);
-    return ss.str();
-}
-
-void generateTestMessages() {
-    auto& ipc = ton_ipc::getIPCService();
+    // Simulate TON external message structure
+    // First 4 bytes: magic
+    data[0] = 0x10; // ext_in_msg_info
+    data[1] = 0x00;
+    data[2] = 0x00;
+    data[3] = 0x00;
+    
+    // Fill rest with random data
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> msg_interval(100, 2000); // 100ms to 2s
-    std::uniform_int_distribution<> data_size(100, 1000);
+    std::uniform_int_distribution<> dis(0, 255);
     
-    while (running) {
-        // Generate external message
-        ton_ipc::ExternalMessageData msg;
-        msg.timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        msg.source_addr = "ext";
-        msg.dest_addr = generateAddress();
-        msg.data.resize(data_size(gen));
-        std::generate(msg.data.begin(), msg.data.end(), [&]() { return gen() & 0xFF; });
-        msg.hash = generateRandomHex(64);
-        
-        ipc.onExternalMessage(msg);
-        
-        std::cout << "[TEST] Sent external message to " << msg.dest_addr 
-                  << " hash=" << msg.hash << std::endl;
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(msg_interval(gen)));
+    for (size_t i = 4; i < size; ++i) {
+        data[i] = dis(gen);
     }
+    
+    return data;
 }
 
-void generateTestBlocks() {
-    auto& ipc = ton_ipc::getIPCService();
+// Generate test block
+std::vector<uint8_t> generateBlock(size_t size) {
+    std::vector<uint8_t> data(size);
+    
+    // Simulate TON block structure
+    // First 4 bytes: block magic
+    data[0] = 0xB5; // block magic
+    data[1] = 0xEE;
+    data[2] = 0x6C;
+    data[3] = 0x35;
+    
+    // Add some structure
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> block_interval(5000, 10000); // 5-10s
-    std::uniform_int_distribution<> account_count(50, 200);
-    std::uniform_int_distribution<> tx_count(100, 500);
+    std::uniform_int_distribution<> dis(0, 255);
     
-    uint32_t block_seqno = 1000000;
-    
-    while (running) {
-        // Generate block
-        ton_ipc::BlockData block;
-        
-        std::stringstream ss;
-        ss << "(-1,8000000000000000," << block_seqno++ << ")";
-        block.block_id = ss.str();
-        
-        block.gen_utime = std::time(nullptr) - 5; // 5 seconds ago
-        block.delay_seconds = 5;
-        block.account_count = account_count(gen);
-        block.transaction_count = tx_count(gen);
-        
-        // Add some transaction hashes (first 5)
-        int tx_to_show = std::min(5, (int)block.transaction_count);
-        for (int i = 0; i < tx_to_show; ++i) {
-            block.transaction_hashes.push_back(generateRandomHex(64));
-        }
-        
-        ipc.onNewBlock(block);
-        
-        std::cout << "[TEST] Sent block " << block.block_id 
-                  << " accounts=" << block.account_count
-                  << " txs=" << block.transaction_count << std::endl;
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(block_interval(gen)));
+    for (size_t i = 4; i < size; ++i) {
+        data[i] = dis(gen);
     }
+    
+    return data;
 }
 
-void printStats() {
-    auto& ipc = ton_ipc::getIPCService();
-    
-    while (running) {
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        
-        auto& stats = ipc.getStats();
-        std::cout << "\n[STATS] Messages sent: " << stats.messages_sent
-                  << ", Blocks sent: " << stats.blocks_sent
-                  << ", Active clients: " << stats.active_clients
-                  << ", Dropped: " << stats.dropped_messages << "\n" << std::endl;
-    }
-}
-
-int main() {
+int main(int argc, char* argv[]) {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
     
-    std::cout << "Starting TON IPC test server..." << std::endl;
+    std::cout << "Fast IPC Test Server" << std::endl;
+    std::cout << "====================" << std::endl;
     
-    // Configure and start IPC service
-    ton_ipc::IPCService::Config config;
-    config.socket_path = "/tmp/ton-ipc.sock";
-    config.max_clients = 100;
-    config.max_queue_size = 10000;
+    // Parse arguments
+    int messages_per_second = 1000;
+    int message_size = 1024;
     
-    auto& ipc = ton_ipc::getIPCService();
+    if (argc > 1) {
+        messages_per_second = std::atoi(argv[1]);
+    }
+    if (argc > 2) {
+        message_size = std::atoi(argv[2]);
+    }
+    
+    std::cout << "Messages per second: " << messages_per_second << std::endl;
+    std::cout << "Message size: " << message_size << " bytes" << std::endl;
+    
+    // Start IPC service
+    auto& ipc = ton_ipc::FastIPCService::getInstance();
     if (!ipc.start()) {
         std::cerr << "Failed to start IPC service" << std::endl;
         return 1;
     }
     
-    std::cout << "IPC service started on " << config.socket_path << std::endl;
+    // Calculate sleep time
+    auto sleep_us = 1000000 / messages_per_second;
     
-    // Start test data generators
-    std::thread msg_thread(generateTestMessages);
-    std::thread block_thread(generateTestBlocks);
-    std::thread stats_thread(printStats);
+    // Statistics
+    uint64_t total_ext_messages = 0;
+    uint64_t total_blocks = 0;
+    auto start_time = std::chrono::high_resolution_clock::now();
     
-    std::cout << "Generating test data... Press Ctrl+C to stop" << std::endl;
+    // Main loop
+    while (running) {
+        // Send external message
+        auto ext_msg = generateExternalMessage(message_size);
+        ipc.sendExternalMessage(ext_msg.data(), ext_msg.size());
+        total_ext_messages++;
+        
+        // Every 100 messages, send a block
+        if (total_ext_messages % 100 == 0) {
+            auto block = generateBlock(message_size * 10); // Blocks are larger
+            ipc.sendNewBlock(block.data(), block.size());
+            total_blocks++;
+        }
+        
+        // Sleep to control rate
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+        
+        // Print stats every second
+        if (total_ext_messages % messages_per_second == 0) {
+            auto now = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+            
+            if (elapsed > 0) {
+                std::cout << "Stats after " << elapsed << "s:" << std::endl;
+                std::cout << "  External messages: " << total_ext_messages 
+                          << " (" << total_ext_messages / elapsed << "/s)" << std::endl;
+                std::cout << "  Blocks: " << total_blocks 
+                          << " (" << total_blocks / elapsed << "/s)" << std::endl;
+                
+                auto ext_channel = ipc.getExternalMessageChannel();
+                auto block_channel = ipc.getNewBlockChannel();
+                
+                if (ext_channel) {
+                    std::cout << "  ExtMsg channel - clients: " << ext_channel->getClientsConnected()
+                              << ", sent: " << ext_channel->getMessagesSent()
+                              << ", bytes: " << ext_channel->getBytessSent() << std::endl;
+                }
+                
+                if (block_channel) {
+                    std::cout << "  Block channel - clients: " << block_channel->getClientsConnected()
+                              << ", sent: " << block_channel->getMessagesSent()
+                              << ", bytes: " << block_channel->getBytessSent() << std::endl;
+                }
+                
+                std::cout << std::endl;
+            }
+        }
+    }
     
-    // Wait for threads
-    msg_thread.join();
-    block_thread.join();
-    stats_thread.join();
+    // Final stats
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_elapsed = std::chrono::duration_cast<std::chrono::seconds>(end_time - start_time).count();
+    
+    std::cout << "\nFinal statistics:" << std::endl;
+    std::cout << "Total runtime: " << total_elapsed << " seconds" << std::endl;
+    std::cout << "Total external messages: " << total_ext_messages << std::endl;
+    std::cout << "Total blocks: " << total_blocks << std::endl;
+    std::cout << "Average rate: " << (total_elapsed > 0 ? total_ext_messages / total_elapsed : 0) << " msg/s" << std::endl;
     
     // Stop service
     ipc.stop();
-    std::cout << "IPC service stopped" << std::endl;
     
     return 0;
 }

@@ -29,7 +29,7 @@
 #include "ton/ton-shard.h"
 #include "ton/ton-tl.hpp"
 
-#include "ipc-service/ton_node_hooks.h"
+#include "ipc-service/include/fast_ipc_hooks.h"
 
 #include "adnl/utils.hpp"
 #include "net/download-block-new.hpp"

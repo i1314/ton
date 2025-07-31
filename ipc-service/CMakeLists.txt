@@ -1,54 +1,34 @@
-cmake_minimum_required(VERSION 3.16)
-project(ton_ipc_service)
+cmake_minimum_required(VERSION 3.10)
+project(fast_ipc)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Options
-option(BUILD_TESTS "Build tests" ON)
-option(BUILD_STATIC "Build static library" OFF)
+# Include directories
+include_directories(include)
 
-# Source files
-set(IPC_SOURCES
-    ipc_service.cpp
+# Fast IPC library
+add_library(fast_ipc SHARED
+    src/fast_ipc.cpp
 )
 
-# Create library
-if(BUILD_STATIC)
-    add_library(ton_ipc STATIC ${IPC_SOURCES})
-else()
-    add_library(ton_ipc SHARED ${IPC_SOURCES})
-endif()
+target_compile_options(fast_ipc PRIVATE -Wall -Wextra -O3)
+target_link_libraries(fast_ipc pthread)
 
-target_include_directories(ton_ipc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-
-# Compiler flags
-target_compile_options(ton_ipc PRIVATE
-    -Wall -Wextra -Wpedantic
-    -O3 -fPIC
+# Test server
+add_executable(test_server
+    test/test_server.cpp
 )
 
-# Link libraries
-target_link_libraries(ton_ipc PRIVATE pthread)
+target_link_libraries(test_server fast_ipc pthread)
 
-# Tests
-if(BUILD_TESTS)
-    enable_testing()
-    
-    # Test server
-    add_executable(test_server test/test_server.cpp)
-    target_link_libraries(test_server ton_ipc pthread)
-    
-    # Integration test
-    add_test(NAME integration_test 
-             COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test/run_integration_test.sh
-             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-endif()
+# Installation
+install(TARGETS fast_ipc
+    LIBRARY DESTINATION lib
+)
 
-# Install
-install(TARGETS ton_ipc
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
-
-install(FILES ipc_service.h
-        DESTINATION include/ton_ipc)
+install(FILES 
+    include/fast_ipc.h
+    include/fast_ipc_hooks.h
+    DESTINATION include/ton_ipc
+)

@@ -29,7 +29,7 @@
 #include "block/block-parse.h"
 #include "block/block-auto.h"
 
-#include "ipc-service/ton_node_hooks.h"
+#include "ipc-service/include/fast_ipc_hooks.h"
 #include "vm/cells/MerkleProof.h"
 
 namespace ton {

@@ -1,10 +1,8 @@
 #!/bin/bash
 
-# Build and test TON IPC Service
-
 set -e
 
-echo "Building TON IPC Service..."
+echo "Building Fast IPC Service..."
 
 # Create build directory
 mkdir -p build
@@ -14,34 +12,29 @@ cd build
 cmake ..
 
 # Build
-make -j$(nproc)
+make -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
 echo "Build complete!"
-
-# Run test server
+echo ""
 echo "Starting test server..."
-./test_server &
-TEST_SERVER_PID=$!
+./test_server 1000 1024 &
+SERVER_PID=$!
 
-# Wait for server to start
 sleep 2
 
-# Build and run Go client example
-echo "Building Go client..."
-cd ../client/go/example
-go build -o ton_ipc_client
-
-echo "Running Go client..."
-./ton_ipc_client &
+echo ""
+echo "Starting Go client..."
+cd ../clients/go
+go run test_client.go &
 CLIENT_PID=$!
 
-# Let it run for 30 seconds
-echo "Running test for 30 seconds..."
+echo ""
+echo "Running for 30 seconds..."
 sleep 30
 
-# Stop processes
-echo "Stopping test..."
+echo ""
+echo "Stopping processes..."
 kill $CLIENT_PID 2>/dev/null || true
-kill $TEST_SERVER_PID 2>/dev/null || true
+kill $SERVER_PID 2>/dev/null || true
 
 echo "Test complete!"
