@@ -24,6 +24,11 @@
 #include "impl/out-msg-queue-proof.hpp"
 #include "td/utils/Random.h"
 #include "ton/ton-tl.hpp"
+#include "auto/tl/ton_api.h"
+#include "block/block.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+#include "fabric.h"
 
 namespace ton {
 
@@ -633,11 +638,85 @@ void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton
 }
 
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
-  LOG(ERROR) << "BLOCK DISCOVERED: " << broadcast.block_id.to_str() 
-             << " catchain_seqno=" << broadcast.catchain_seqno
-             << " validator_set_hash=" << broadcast.validator_set_hash
-             << " data_size=" << broadcast.data.size()
-             << " signature_count=" << broadcast.signatures.size();
+  auto now = td::Clocks::system();
+  
+  // Parse block to get gen_utime and transactions
+  auto block_res = create_block(broadcast.block_id, broadcast.data.clone());
+  if (block_res.is_ok()) {
+    auto block = block_res.move_as_ok();
+    auto root = block->root_cell();
+    if (root.not_null()) {
+      try {
+        block::gen::Block::Record blk;
+        block::gen::BlockInfo::Record info;
+        if (tlb::unpack_cell(root, blk) && tlb::unpack_cell(blk.info, info)) {
+          auto gen_utime = info.gen_utime;
+          auto delay = now - gen_utime;
+          
+          LOG(ERROR) << "BLOCK DISCOVERED: " << broadcast.block_id.to_str() 
+                     << " gen_utime=" << gen_utime
+                     << " delay=" << delay << "s"
+                     << " catchain_seqno=" << broadcast.catchain_seqno
+                     << " validator_set_hash=" << broadcast.validator_set_hash
+                     << " data_size=" << broadcast.data.size()
+                     << " signature_count=" << broadcast.signatures.size();
+          
+          // Extract transactions
+          block::gen::BlockExtra::Record extra;
+          if (tlb::unpack_cell(blk.extra, extra)) {
+            block::ShardAccountBlocks account_blocks;
+            account_blocks.init_from(std::move(extra.account_blocks));
+            
+            std::vector<std::string> tx_info;
+            int tx_count = 0;
+            int tx_shown = 0;
+            
+            account_blocks.scan_account_transactions(
+              [&](block::ShardAccountBlocks::trans_series_desc_t& series_desc) -> bool {
+                auto& trans_dict = series_desc.trans_dict;
+                trans_dict->check_for_each([&](td::Ref<vm::CellSlice> value, td::ConstBitPtr key, int key_len) -> bool {
+                  tx_count++;
+                  if (tx_shown < 5) {
+                    tx_shown++;
+                    block::gen::Transaction::Record trans;
+                    if (tlb::unpack_cell(value->prefetch_ref(), trans)) {
+                      std::string lt_str = trans.lt.to_dec_string();
+                      auto addr = series_desc.addr.to_hex();
+                      auto hash = value->prefetch_ref()->get_hash().to_hex();
+                      tx_info.push_back(PSTRING() << tx_shown << "/" << "?" << " addr=" << addr << " hash=" << hash << " lt=" << lt_str);
+                    }
+                  }
+                  return true;
+                });
+                return true;
+              });
+            
+            // Update tx_info with total count
+            for (auto& info : tx_info) {
+              auto pos = info.find("/");
+              if (pos != std::string::npos) {
+                info = info.substr(0, pos + 1) + std::to_string(tx_count) + info.substr(pos + 1);
+              }
+            }
+            
+            if (!tx_info.empty()) {
+              LOG(ERROR) << "  Transactions: " << td::format::as_array(tx_info);
+            }
+          }
+        }
+      } catch (...) {
+        LOG(ERROR) << "Failed to parse block data";
+      }
+    }
+  } else {
+    LOG(ERROR) << "BLOCK DISCOVERED: " << broadcast.block_id.to_str() 
+               << " (failed to parse block data)"
+               << " catchain_seqno=" << broadcast.catchain_seqno
+               << " validator_set_hash=" << broadcast.validator_set_hash
+               << " data_size=" << broadcast.data.size()
+               << " signature_count=" << broadcast.signatures.size();
+  }
+  
   send_block_broadcast_to_custom_overlays(broadcast);
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
                           [](td::Result<td::Unit> R) {
