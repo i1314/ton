@@ -32,9 +32,9 @@ inline void hookExternalMessage(const std::string& source,
                                const std::string& hash = "") {
     ensureIPCStarted();
     
-    // Send raw data directly
+    // Send raw data directly (cast to uint8_t*)
     ton_ipc::FastIPCService::getInstance().sendExternalMessage(
-        data.data(), data.size()
+        reinterpret_cast<const uint8_t*>(data.data()), data.size()
     );
 }
 
@@ -59,9 +59,9 @@ inline void hookNewBlockWithData(const std::string& block_id,
                                 const td::BufferSlice& raw_data) {
     ensureIPCStarted();
     
-    // Send raw block data directly
+    // Send raw block data directly (cast to uint8_t*)
     ton_ipc::FastIPCService::getInstance().sendNewBlock(
-        raw_data.data(), raw_data.size()
+        reinterpret_cast<const uint8_t*>(raw_data.data()), raw_data.size()
     );
 }
 
