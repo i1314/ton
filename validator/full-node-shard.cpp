@@ -836,7 +836,7 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ex
   
   // IPC hook for external messages
   try {
-    ton_ipc_hooks::hookExternalMessage(src.to_hex(), dest_addr, query.message_->data_, "");
+    ton_ipc_hooks::hookExternalMessage(PSTRING() << src, dest_addr, query.message_->data_, "");
   } catch (...) {
     // Ignore IPC errors to not affect node operation
   }
