@@ -275,6 +275,15 @@ func (c *Client) receiveLoop() {
 				c.handleError(fmt.Errorf("failed to parse block info: %w", err))
 			}
 			
+		case MessageTypeSubscribe:
+			// Handle subscription confirmation
+			if header.PayloadSize == 4 {
+				var subscriptionType uint32
+				if err := binary.Read(bytes.NewReader(payload), binary.LittleEndian, &subscriptionType); err == nil {
+					fmt.Printf("[Client] Received subscription confirmation for types=%d\n", subscriptionType)
+				}
+			}
+			
 		case MessageTypeHeartbeat:
 			// Ignore heartbeats
 			

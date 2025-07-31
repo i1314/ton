@@ -232,7 +232,29 @@ private:
         
         while (running_) {
             MessageHeader header;
-            ssize_t n = recv(client_fd, &header, sizeof(header), MSG_WAITALL);
+            
+            // Read header with retries for non-blocking socket
+            size_t bytes_read = 0;
+            while (bytes_read < sizeof(header)) {
+                ssize_t n = recv(client_fd, ((char*)&header) + bytes_read, 
+                                sizeof(header) - bytes_read, 0);
+                if (n > 0) {
+                    bytes_read += n;
+                } else if (n == 0) {
+                    // Connection closed
+                    goto client_done;
+                } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // No data available, wait a bit
+                    usleep(10000); // 10ms
+                    continue;
+                } else {
+                    // Real error
+                    log("[IPC] Client read error, fd=" + std::to_string(client_fd) + ": " + std::string(strerror(errno)));
+                    goto client_done;
+                }
+            }
+            
+            ssize_t n = sizeof(header); // For compatibility with existing code
             
             if (n != sizeof(header)) {
                 if (n == 0) {
@@ -253,7 +275,23 @@ private:
             if (header.type == MessageType::SUBSCRIBE) {
                 if (header.payload_size == 4) {
                     uint32_t subscription_type;
-                    if (recv(client_fd, &subscription_type, 4, MSG_WAITALL) == 4) {
+                    // Read subscription type with retries
+                    size_t sub_bytes = 0;
+                    while (sub_bytes < 4) {
+                        ssize_t n = recv(client_fd, ((char*)&subscription_type) + sub_bytes, 
+                                        4 - sub_bytes, 0);
+                        if (n > 0) {
+                            sub_bytes += n;
+                        } else if (n == 0) {
+                            goto client_done;
+                        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            usleep(10000);
+                            continue;
+                        } else {
+                            goto client_done;
+                        }
+                    }
+                    if (sub_bytes == 4) {
                         std::lock_guard<std::mutex> lock(clients_mutex_);
                         for (auto& client : clients_) {
                             if (client.fd == client_fd) {
@@ -281,9 +319,25 @@ private:
             // Skip other message types for now
             else if (header.payload_size > 0) {
                 std::vector<uint8_t> payload(header.payload_size);
-                recv(client_fd, payload.data(), header.payload_size, MSG_WAITALL);
+                size_t payload_read = 0;
+                while (payload_read < header.payload_size) {
+                    ssize_t n = recv(client_fd, payload.data() + payload_read, 
+                                    header.payload_size - payload_read, 0);
+                    if (n > 0) {
+                        payload_read += n;
+                    } else if (n == 0) {
+                        goto client_done;
+                    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        usleep(10000);
+                        continue;
+                    } else {
+                        goto client_done;
+                    }
+                }
             }
         }
+        
+    client_done:
         
         // Remove client
         {
