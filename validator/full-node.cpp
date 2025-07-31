@@ -691,7 +691,7 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                         if (trans_cell.not_null()) {
                           block::gen::Transaction::Record trans;
                           if (tlb::unpack_cell(trans_cell, trans)) {
-                            std::string lt_str = trans.lt.to_dec_string();
+                            std::string lt_str = std::to_string(trans.lt);
                             auto addr = key.to_hex(256);
                             auto hash = trans_cell->get_hash().to_hex();
                             tx_info.push_back(PSTRING() << tx_shown << "/" << "?" << " addr=" << addr 
