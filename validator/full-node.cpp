@@ -666,60 +666,83 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
           // Try to extract transactions
           try {
             block::gen::BlockExtra::Record extra;
-            if (tlb::unpack_cell(blk.extra, extra) && extra.account_blocks.not_null()) {
-              vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
-                                             block::tlb::aug_ShardAccountBlocks};
-              
-              std::vector<std::string> tx_info;
-              int tx_count = 0;
-              int tx_shown = 0;
-              
-              // Iterate through account blocks
-              acc_dict.check_for_each([&](td::Ref<vm::CellSlice> value, td::ConstBitPtr key, int key_len) -> bool {
-                if (key_len == 256) {
-                  block::gen::AccountBlock::Record acc_blk;
-                  if (value.not_null() && tlb::csr_unpack_safe(value, acc_blk) && acc_blk.transactions.not_null()) {
-                    vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), acc_blk.transactions, 64,
-                                                     block::tlb::aug_AccountTransactions};
-                    
-                    // Count and show transactions
-                    trans_dict.check_for_each([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
-                      tx_count++;
-                      if (tx_shown < 5 && trans_cs.not_null()) {
-                        tx_shown++;
-                        auto trans_cell = trans_cs->prefetch_ref();
-                        if (trans_cell.not_null()) {
-                          block::gen::Transaction::Record trans;
-                          if (tlb::unpack_cell(trans_cell, trans)) {
-                            std::string lt_str = std::to_string(trans.lt);
-                            auto addr = key.to_hex(256);
-                            auto hash = trans_cell->get_hash().to_hex();
-                            tx_info.push_back(PSTRING() << tx_shown << "/" << "?" << " addr=" << addr 
-                                            << " hash=" << hash << " lt=" << lt_str);
+            if (tlb::unpack_cell(blk.extra, extra)) {
+              if (extra.account_blocks.not_null()) {
+                vm::AugmentedDictionary acc_dict{vm::load_cell_slice_ref(extra.account_blocks), 256,
+                                               block::tlb::aug_ShardAccountBlocks};
+                
+                std::vector<std::string> tx_info;
+                int tx_count = 0;
+                int tx_shown = 0;
+                int account_count = 0;
+                
+                // Iterate through account blocks
+                acc_dict.check_for_each([&](td::Ref<vm::CellSlice> value, td::ConstBitPtr key, int key_len) -> bool {
+                  if (key_len == 256) {
+                    account_count++;
+                    block::gen::AccountBlock::Record acc_blk;
+                    if (value.not_null() && tlb::csr_unpack_safe(value, acc_blk)) {
+                      if (acc_blk.transactions.not_null()) {
+                        // Create transaction dictionary
+                        vm::Dictionary trans_dict{acc_blk.transactions, 64};
+                        
+                        // Count and show transactions
+                        trans_dict.check_for_each([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
+                          tx_count++;
+                          if (tx_shown < 5 && trans_cs.not_null()) {
+                            tx_shown++;
+                            try {
+                              auto trans_cell = trans_cs->prefetch_ref();
+                              if (trans_cell.not_null()) {
+                                // Get transaction hash and logical time directly
+                                auto hash = trans_cell->get_hash().to_hex();
+                                auto lt = trans_key_len == 64 ? td::BitArray<64>(trans_key).to_ulong() : 0;
+                                auto addr = key.to_hex(256);
+                                tx_info.push_back(PSTRING() << tx_shown << "/" << "?" 
+                                                << " addr=" << addr 
+                                                << " hash=" << hash 
+                                                << " lt=" << lt);
+                              }
+                            } catch (...) {
+                              // Skip this transaction
+                            }
                           }
-                        }
+                          return true;
+                        });
                       }
-                      return true;
-                    });
+                    }
+                  }
+                  return true;
+                });
+                
+                // Update tx_info with total count
+                for (auto& info : tx_info) {
+                  auto pos = info.find("/");
+                  if (pos != std::string::npos) {
+                    info = info.substr(0, pos + 1) + std::to_string(tx_count) + info.substr(pos + 1);
                   }
                 }
-                return true;
-              });
-              
-              // Update tx_info with total count
-              for (auto& info : tx_info) {
-                auto pos = info.find("/");
-                if (pos != std::string::npos) {
-                  info = info.substr(0, pos + 1) + std::to_string(tx_count) + info.substr(pos + 1);
+                
+                // Always log transaction summary even if no transactions
+                if (tx_count > 0) {
+                  if (!tx_info.empty()) {
+                    LOG(ERROR) << "  Transactions (" << tx_count << " total): " << td::format::as_array(tx_info);
+                  } else {
+                    LOG(ERROR) << "  Transactions: " << tx_count << " total (none shown)";
+                  }
+                } else if (account_count > 0) {
+                  LOG(ERROR) << "  No transactions in " << account_count << " accounts";
                 }
+              } else {
+                LOG(ERROR) << "  No account blocks in this block";
               }
-              
-              if (!tx_info.empty()) {
-                LOG(ERROR) << "  Transactions: " << td::format::as_array(tx_info);
-              }
+            } else {
+              LOG(ERROR) << "  Failed to unpack BlockExtra";
             }
+          } catch (const std::exception& e) {
+            LOG(ERROR) << "  Transaction parsing exception: " << e.what();
           } catch (...) {
-            // Transaction parsing failed, but we still have basic block info
+            LOG(ERROR) << "  Transaction parsing failed with unknown exception";
           }
         } else {
           // Could not unpack block header, show basic info
