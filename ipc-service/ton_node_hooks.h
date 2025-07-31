@@ -60,7 +60,10 @@ inline void hookExternalMessage(const std::string& source,
                                const std::string& hash = "") {
     static AutoInit auto_init;  // Ensure service is started
     
-    std::cerr << "[IPC Hook] External message hook called: from=" << source 
+    auto hook_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::cerr << "[IPC Hook] External message hook called at " << hook_time 
+              << ": from=" << source 
               << " to=" << dest << " size=" << data.size() << std::endl;
     
     ton_ipc::ExternalMessageData msg;
@@ -103,9 +106,14 @@ inline void hookNewBlockWithData(const std::string& block_id,
                                 const td::BufferSlice& raw_data) {
     static AutoInit auto_init;  // Ensure service is started
     
-    std::cerr << "[IPC Hook] New block hook called: id=" << block_id 
+    auto hook_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    std::cerr << "[IPC Hook] New block hook called at " << hook_time 
+              << ": id=" << block_id 
               << " accounts=" << account_count 
-              << " txs=" << transaction_count << std::endl;
+              << " txs=" << transaction_count 
+              << " gen_utime=" << gen_utime
+              << " delay=" << delay_seconds << "s" << std::endl;
     
     ton_ipc::BlockData block;
     block.block_id = block_id;
