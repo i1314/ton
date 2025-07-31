@@ -22,12 +22,7 @@ namespace ton_ipc {
 class IPCService::Impl {
     std::ofstream log_file_;
     
-    template<typename... Args>
-    void log(Args&&... args) {
-        std::stringstream ss;
-        (ss << ... << args);
-        std::string msg = ss.str();
-        
+    void log(const std::string& msg) {
         if (log_file_.is_open()) {
             auto now = std::chrono::system_clock::now();
             auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
@@ -57,12 +52,21 @@ public:
             return false; // Already running
         }
 
-        log("[IPC] Starting IPC service on " << config_.socket_path);
+        log("[IPC] Starting IPC service on " + config_.socket_path);
 
         // Create Unix domain socket
-        server_fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        server_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
         if (server_fd_ < 0) {
-            log("[IPC] Failed to create socket: " << strerror(errno));
+            log("[IPC] Failed to create socket: " + std::string(strerror(errno)));
+            running_ = false;
+            return false;
+        }
+        
+        // Set non-blocking mode
+        int flags = fcntl(server_fd_, F_GETFL, 0);
+        if (flags < 0 || fcntl(server_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+            log("[IPC] Failed to set non-blocking mode: " + std::string(strerror(errno)));
+            close(server_fd_);
             running_ = false;
             return false;
         }
@@ -96,8 +100,7 @@ public:
         // Start acceptor thread
         acceptor_thread_ = std::thread(&Impl::acceptorLoop, this);
 
-        log("[IPC] Service started successfully with " << config_.worker_threads 
-                  << " worker threads");
+        log("[IPC] Service started successfully with " + std::to_string(config_.worker_threads) + " worker threads");
         return true;
     }
 
@@ -147,9 +150,7 @@ public:
             return;
         }
 
-        log("[IPC] External message received: from=" << msg.source_addr 
-                  << " to=" << msg.dest_addr 
-                  << " size=" << msg.data.size());
+        log("[IPC] External message received: from=" + msg.source_addr + " to=" + msg.dest_addr + " size=" + std::to_string(msg.data.size()));
         
         auto data = serializeExternalMessage(msg);
         enqueueMessage(MessageType::EXTERNAL_MESSAGE, std::move(data), stats);
@@ -162,9 +163,7 @@ public:
             return;
         }
 
-        log("[IPC] New block received: id=" << block.block_id 
-                  << " accounts=" << block.account_count
-                  << " txs=" << block.transaction_count);
+        log("[IPC] New block received: id=" + block.block_id + " accounts=" + std::to_string(block.account_count) + " txs=" + std::to_string(block.transaction_count));
         
         auto data = serializeBlock(block);
         enqueueMessage(MessageType::NEW_BLOCK, std::move(data), stats);
@@ -195,10 +194,15 @@ private:
 
             struct sockaddr_un client_addr;
             socklen_t client_len = sizeof(client_addr);
-            int client_fd = accept4(server_fd_, (struct sockaddr*)&client_addr, 
-                                   &client_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
+            int client_fd = accept(server_fd_, (struct sockaddr*)&client_addr, &client_len);
             
             if (client_fd < 0) continue;
+            
+            // Set non-blocking mode for client
+            int flags = fcntl(client_fd, F_GETFL, 0);
+            if (flags >= 0) {
+                fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+            }
 
             // Add client
             {
@@ -215,8 +219,7 @@ private:
                 client.last_activity = std::chrono::steady_clock::now();
                 clients_.push_back(client);
                 
-                log("[IPC] Client connected, fd=" << client_fd 
-                          << ", total clients=" << clients_.size());
+                log("[IPC] Client connected, fd=" + std::to_string(client_fd) + ", total clients=" + std::to_string(clients_.size()));
                 
                 // Start client handler thread
                 std::thread(&Impl::handleClient, this, client_fd).detach();
@@ -225,7 +228,7 @@ private:
     }
 
     void handleClient(int client_fd) {
-        log("[IPC] Client handler started for fd=" << client_fd);
+        log("[IPC] Client handler started for fd=" + std::to_string(client_fd));
         
         while (running_) {
             MessageHeader header;
@@ -233,16 +236,16 @@ private:
             
             if (n != sizeof(header)) {
                 if (n == 0) {
-                    log("[IPC] Client disconnected, fd=" << client_fd);
+                    log("[IPC] Client disconnected, fd=" + std::to_string(client_fd));
                 } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                    log("[IPC] Client read error, fd=" << client_fd << ": " << strerror(errno));
+                    log("[IPC] Client read error, fd=" + std::to_string(client_fd) + ": " + std::string(strerror(errno)));
                 }
                 break;
             }
             
             // Validate header
             if (header.magic != 0x544F4E30 || header.version != 1) {
-                log("[IPC] Invalid header from client fd=" << client_fd);
+                log("[IPC] Invalid header from client fd=" + std::to_string(client_fd));
                 break;
             }
             
@@ -255,8 +258,20 @@ private:
                         for (auto& client : clients_) {
                             if (client.fd == client_fd) {
                                 client.subscriptions = subscription_type;
-                                log("[IPC] Client fd=" << client_fd 
-                                          << " subscribed to types=" << subscription_type);
+                                log("[IPC] Client fd=" + std::to_string(client_fd) + " subscribed to types=" + std::to_string(subscription_type));
+                                
+                                // Send subscription confirmation response
+                                MessageHeader response;
+                                response.magic = 0x544F4E30;
+                                response.version = 1;
+                                response.type = MessageType::SUBSCRIBE;
+                                response.payload_size = 4;
+                                
+                                if (send(client_fd, &response, sizeof(response), MSG_NOSIGNAL) == sizeof(response)) {
+                                    if (send(client_fd, &subscription_type, 4, MSG_NOSIGNAL) == 4) {
+                                        log("[IPC] Sent subscription confirmation to client fd=" + std::to_string(client_fd));
+                                    }
+                                }
                                 break;
                             }
                         }
@@ -276,7 +291,7 @@ private:
             clients_.erase(std::remove_if(clients_.begin(), clients_.end(),
                                          [client_fd](const Client& c) { return c.fd == client_fd; }),
                           clients_.end());
-            log("[IPC] Client removed, fd=" << client_fd);
+            log("[IPC] Client removed, fd=" + std::to_string(client_fd));
         }
         close(client_fd);
     }
