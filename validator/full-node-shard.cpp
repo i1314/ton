@@ -46,6 +46,12 @@
 #include "tl/tl_json.h"
 #include "auto/tl/ton_api_json.h"
 
+#include <chrono>
+#include <iomanip>
+#include "vm/boc.h"
+#include "block/block-parse.h"
+#include "block/block-auto.h"
+
 namespace ton {
 
 namespace validator {
@@ -784,6 +790,48 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ih
 }
 
 void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query) {
+  // Get current time with milliseconds
+  auto now = std::chrono::system_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+  
+  // Convert message data to hex
+  std::string hex_data;
+  auto data_slice = query.message_->data_.as_slice();
+  for (size_t i = 0; i < data_slice.size(); i++) {
+    char buf[3];
+    snprintf(buf, sizeof(buf), "%02x", (unsigned char)data_slice[i]);
+    hex_data += buf;
+  }
+  
+  // Extract destination address from the message
+  std::string dest_addr = "unknown";
+  if (query.message_->data_.size() >= 2) {
+    // Try to parse the message to extract destination
+    auto msg_slice = td::Slice(query.message_->data_);
+    vm::BagOfCells boc;
+    auto res = boc.deserialize(msg_slice);
+    if (res.is_ok() && boc.get_root_count() == 1) {
+      auto root = boc.get_root_cell();
+      vm::CellSlice cs{vm::NoVmOrd{}, root};
+      if (cs.prefetch_ulong(2) == 2) {  // ext_in_msg_info$10
+        block::gen::CommonMsgInfo::Record_ext_in_msg_info info;
+        if (tlb::unpack_cell_inexact(root, info)) {
+          ton::WorkchainId wc;
+          ton::StdSmcAddress addr;
+          if (block::tlb::t_MsgAddressInt.extract_std_address(info.dest, wc, addr)) {
+            dest_addr = PSTRING() << wc << ":" << addr.to_hex();
+          }
+        }
+      }
+    }
+  }
+  
+  LOG(WARNING) << "[EXT_MSG_RECEIVED] time_ms=" << ms 
+               << " source=" << src 
+               << " dest=" << dest_addr
+               << " size=" << query.message_->data_.size()
+               << " data_hex=" << hex_data;
+  
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
                           std::move(query.message_->data_), 0);
 }
