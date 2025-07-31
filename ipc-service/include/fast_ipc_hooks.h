@@ -32,6 +32,12 @@ inline void hookExternalMessage(const std::string& source,
                                const std::string& hash = "") {
     ensureIPCStarted();
     
+    static uint64_t msg_count = 0;
+    msg_count++;
+    if (msg_count % 100 == 0) {
+        std::cerr << "[IPC] Sent " << msg_count << " external messages" << std::endl;
+    }
+    
     // Send raw data directly (cast to uint8_t*)
     ton_ipc::FastIPCService::getInstance().sendExternalMessage(
         reinterpret_cast<const uint8_t*>(data.data()), data.size()
@@ -58,6 +64,8 @@ inline void hookNewBlockWithData(const std::string& block_id,
                                 const std::vector<std::string>& tx_hashes,
                                 const td::BufferSlice& raw_data) {
     ensureIPCStarted();
+    
+    std::cerr << "[IPC] Sending block " << block_id << " size=" << raw_data.size() << " bytes" << std::endl;
     
     // Send raw block data directly (cast to uint8_t*)
     ton_ipc::FastIPCService::getInstance().sendNewBlock(
