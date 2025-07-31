@@ -633,6 +633,11 @@ void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton
 }
 
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
+  LOG(ERROR) << "BLOCK DISCOVERED: " << broadcast.block_id.to_str() 
+             << " catchain_seqno=" << broadcast.catchain_seqno
+             << " validator_set_hash=" << broadcast.validator_set_hash
+             << " data_size=" << broadcast.data.size()
+             << " signature_count=" << broadcast.signatures.size();
   send_block_broadcast_to_custom_overlays(broadcast);
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
                           [](td::Result<td::Unit> R) {
