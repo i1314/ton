@@ -683,11 +683,12 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                     block::gen::AccountBlock::Record acc_blk;
                     if (value.not_null() && tlb::csr_unpack_safe(value, acc_blk)) {
                       if (acc_blk.transactions.not_null()) {
-                        // Create transaction dictionary
-                        vm::Dictionary trans_dict{acc_blk.transactions, 64};
+                        // Create transaction dictionary using AugmentedDictionary
+                        vm::AugmentedDictionary trans_dict{vm::DictNonEmpty(), acc_blk.transactions, 64,
+                                                         block::tlb::aug_AccountTransactions};
                         
                         // Count and show transactions
-                        trans_dict.check_for_each([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
+                        trans_dict.scan([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
                           tx_count++;
                           if (tx_shown < 5 && trans_cs.not_null()) {
                             tx_shown++;

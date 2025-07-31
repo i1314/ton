@@ -826,11 +826,11 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ex
     }
   }
   
-  LOG(ERROR) << "[EXT_MSG_RECEIVED] time_ms=" << ms 
-               << " source=" << src 
-               << " dest=" << dest_addr
-               << " size=" << query.message_->data_.size()
-               << " data_hex=" << hex_data;
+  LOG(WARNING) << "[EXT_MSG_RECEIVED] time_ms=" << ms 
+                 << " source=" << src 
+                 << " dest=" << dest_addr
+                 << " size=" << query.message_->data_.size()
+                 << " data_hex=" << hex_data;
   
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
                           std::move(query.message_->data_), 0);
