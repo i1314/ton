@@ -7,16 +7,16 @@ Pure Unix Domain Socket (UDS) based design with separate .ipc files for external
 
 ### 1. Dual UDS Channels
 ```
-/tmp/ton-extmsg.ipc   - External messages only (SOCK_SEQPACKET)
-/tmp/ton-blocks.ipc   - New blocks only (SOCK_SEQPACKET)
+/tmp/ton-extmsg.ipc   - External messages only (SOCK_STREAM)
+/tmp/ton-blocks.ipc   - New blocks only (SOCK_STREAM)
 ```
 
-### 2. Why SOCK_SEQPACKET?
-- **Message boundaries preserved** - No need to parse stream
-- **Atomic delivery** - Full message or nothing
-- **Reliable & ordered** - Like TCP but for local communication
-- **Better than SOCK_STREAM** - No message framing needed
-- **Better than SOCK_DGRAM** - Reliable delivery
+### 2. Why SOCK_STREAM?
+- **Universal compatibility** - Works with all languages including Go
+- **Reliable & ordered** - TCP-like semantics
+- **Simple implementation** - Standard socket operations
+- **Message framing** - Using fixed 16-byte header for boundaries
+- **Cross-platform** - Same behavior on Linux and macOS
 
 ### 3. Message Format (Minimal Header)
 ```c

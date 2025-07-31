@@ -36,12 +36,8 @@ bool IPCChannel::start() {
         return false; // Already running
     }
     
-    // Create socket (use SOCK_STREAM on macOS as SOCK_SEQPACKET is not well supported)
-#ifdef __APPLE__
+    // Create socket (use SOCK_STREAM for compatibility with Go client)
     server_fd_ = socket(AF_UNIX, SOCK_STREAM, 0);
-#else
-    server_fd_ = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-#endif
     if (server_fd_ < 0) {
         std::cerr << "Failed to create socket: " << strerror(errno) << std::endl;
         running_ = false;
