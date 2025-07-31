@@ -688,7 +688,7 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                                                          block::tlb::aug_AccountTransactions};
                         
                         // Count and show transactions
-                        trans_dict.scan([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
+                        trans_dict.check_for_each([&](td::Ref<vm::CellSlice> trans_cs, td::ConstBitPtr trans_key, int trans_key_len) -> bool {
                           tx_count++;
                           if (tx_shown < 5 && trans_cs.not_null()) {
                             tx_shown++;
