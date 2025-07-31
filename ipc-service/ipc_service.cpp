@@ -385,6 +385,9 @@ private:
         }
 
         MessageHeader header;
+        memset(&header, 0, sizeof(header));  // Clear all fields first
+        header.magic = 0x544F4E30;
+        header.version = 1;
         header.type = type;
         header.payload_size = static_cast<uint32_t>(data.size());
 
@@ -402,15 +405,32 @@ private:
             }
 
             // Send with MSG_NOSIGNAL to prevent SIGPIPE
-            ssize_t sent = send(it->fd, packet.data(), packet.size(), MSG_NOSIGNAL);
-            if (sent < 0) {
-                // Connection broken, remove client
-                close(it->fd);
-                it = clients_.erase(it);
-            } else {
-                it->last_activity = std::chrono::steady_clock::now();
-                ++it;
+            // Handle partial sends
+            size_t total_sent = 0;
+            while (total_sent < packet.size()) {
+                ssize_t sent = send(it->fd, packet.data() + total_sent, 
+                                   packet.size() - total_sent, MSG_NOSIGNAL);
+                if (sent < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        // Socket buffer full, wait a bit
+                        usleep(1000); // 1ms
+                        continue;
+                    }
+                    // Connection broken, remove client
+                    close(it->fd);
+                    it = clients_.erase(it);
+                    goto next_client;
+                } else if (sent == 0) {
+                    // Connection closed
+                    close(it->fd);
+                    it = clients_.erase(it);
+                    goto next_client;
+                }
+                total_sent += sent;
             }
+            it->last_activity = std::chrono::steady_clock::now();
+            ++it;
+            next_client:;
         }
     }
 
