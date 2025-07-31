@@ -150,7 +150,11 @@ public:
             return;
         }
 
-        log("[IPC] External message received: from=" + msg.source_addr + " to=" + msg.dest_addr + " size=" + std::to_string(msg.data.size()));
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        auto delay = now - msg.timestamp_ms;
+        log("[IPC] External message received: from=" + msg.source_addr + " to=" + msg.dest_addr + 
+            " size=" + std::to_string(msg.data.size()) + " delay=" + std::to_string(delay) + "ms");
         
         auto data = serializeExternalMessage(msg);
         enqueueMessage(MessageType::EXTERNAL_MESSAGE, std::move(data), stats);
@@ -163,7 +167,8 @@ public:
             return;
         }
 
-        log("[IPC] New block received: id=" + block.block_id + " accounts=" + std::to_string(block.account_count) + " txs=" + std::to_string(block.transaction_count));
+        log("[IPC] New block received: id=" + block.block_id + " accounts=" + std::to_string(block.account_count) + 
+            " txs=" + std::to_string(block.transaction_count) + " delay=" + std::to_string(block.delay_seconds) + "s");
         
         auto data = serializeBlock(block);
         enqueueMessage(MessageType::NEW_BLOCK, std::move(data), stats);
@@ -353,13 +358,14 @@ private:
     void workerLoop() {
         while (running_) {
             std::unique_lock<std::mutex> lock(queue_mutex_);
-            queue_cv_.wait_for(lock, std::chrono::milliseconds(100), 
+            queue_cv_.wait_for(lock, std::chrono::milliseconds(10), 
                              [this] { return !message_queue_.empty() || !running_; });
 
             if (!running_) break;
 
             std::vector<QueueItem> items;
-            while (!message_queue_.empty() && items.size() < 100) {
+            // Process up to 50 messages at once to reduce latency
+            while (!message_queue_.empty() && items.size() < 50) {
                 items.push_back(std::move(message_queue_.front()));
                 message_queue_.pop();
             }
@@ -413,7 +419,7 @@ private:
                 if (sent < 0) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         // Socket buffer full, wait a bit
-                        usleep(1000); // 1ms
+                        usleep(100); // 0.1ms
                         continue;
                     }
                     // Connection broken, remove client
@@ -441,7 +447,7 @@ private:
             return;
         }
         message_queue_.push({type, std::move(data)});
-        queue_cv_.notify_one();
+        queue_cv_.notify_all();  // Wake all workers for lower latency
     }
 
     std::vector<uint8_t> serializeExternalMessage(const ExternalMessageData& msg) {
