@@ -1,3 +1,3 @@
-module ton-ipc-client
+module github.com/ton-blockchain/ton/ipc-service/clients/go
 
-go 1.22.5
+go 1.19

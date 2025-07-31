@@ -124,12 +124,13 @@ func (c *Client) Close() error {
 func (c *Client) receiveLoop() {
 	defer c.wg.Done()
 	
-	// Large buffer for messages
-	buffer := make([]byte, 65536)
+	// Buffer for streaming data
+	buffer := make([]byte, 0, 65536)
+	tmpBuffer := make([]byte, 65536)
 	
 	for c.running.Load() {
-		// Read complete message (SOCK_SEQPACKET guarantees message boundaries)
-		n, err := c.conn.Read(buffer)
+		// Read available data
+		n, err := c.conn.Read(tmpBuffer)
 		if err != nil {
 			if c.running.Load() {
 				fmt.Printf("Read error: %v\n", err)
@@ -137,36 +138,48 @@ func (c *Client) receiveLoop() {
 			break
 		}
 		
-		// Minimum size check
-		if n < HeaderSize {
-			fmt.Printf("Message too small: %d bytes\n", n)
-			continue
-		}
+		// Append to buffer
+		buffer = append(buffer, tmpBuffer[:n]...)
 		
-		// Parse header
-		header := MessageHeader{
-			TimestampNs: binary.LittleEndian.Uint64(buffer[0:8]),
-			DataLength:  binary.LittleEndian.Uint32(buffer[8:12]),
-		}
+		// Process complete messages in buffer
+		for len(buffer) >= HeaderSize {
+			// Parse header
+			header := MessageHeader{
+				TimestampNs: binary.LittleEndian.Uint64(buffer[0:8]),
+				DataLength:  binary.LittleEndian.Uint32(buffer[8:12]),
+			}
+			
+			// Check if we have complete message
+			expectedSize := HeaderSize + int(header.DataLength)
+			if len(buffer) < expectedSize {
+				// Wait for more data
+				break
+			}
+			
+			// Validate data length
+			if header.DataLength > 10*1024*1024 { // 10MB sanity check
+				fmt.Printf("Invalid data length: %d\n", header.DataLength)
+				// Skip this message and try to recover
+				buffer = buffer[HeaderSize:]
+				continue
+			}
+			
+			// Extract complete message
+			data := make([]byte, header.DataLength)
+			copy(data, buffer[HeaderSize:expectedSize])
+			
+			// Remove processed message from buffer
+			buffer = buffer[expectedSize:]
 		
-		// Validate size
-		expectedSize := HeaderSize + int(header.DataLength)
-		if n != expectedSize {
-			fmt.Printf("Size mismatch: got %d, expected %d\n", n, expectedSize)
-			continue
-		}
-		
-		// Extract data
-		data := buffer[HeaderSize:n]
-		
-		// Update statistics
-		c.messagesReceived.Add(1)
-		c.bytesReceived.Add(uint64(n))
-		c.lastMessageNs.Store(header.TimestampNs)
-		
-		// Call handler
-		if c.handler != nil {
-			c.handler(header.TimestampNs, data)
+			// Update statistics
+			c.messagesReceived.Add(1)
+			c.bytesReceived.Add(uint64(header.DataLength)) // Count only payload bytes
+			c.lastMessageNs.Store(header.TimestampNs)
+			
+			// Call handler
+			if c.handler != nil {
+				c.handler(header.TimestampNs, data)
+			}
 		}
 	}
 }
