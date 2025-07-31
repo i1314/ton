@@ -5,6 +5,9 @@ endif()
 #add_subdirectory(dummy0)
 add_subdirectory(impl)
 
+# Add IPC service
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ipc-service ${CMAKE_CURRENT_BINARY_DIR}/ipc-service)
+
 set(VALIDATOR_DB_SOURCE
   db/archiver.cpp
   db/archiver.hpp
