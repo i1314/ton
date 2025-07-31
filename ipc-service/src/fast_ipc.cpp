@@ -16,9 +16,9 @@
 
 namespace ton_ipc {
 
-// Get high-resolution timestamp in nanoseconds
+// Get Unix timestamp in nanoseconds
 static uint64_t getNanoTimestamp() {
-    auto now = std::chrono::high_resolution_clock::now();
+    auto now = std::chrono::system_clock::now();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
         now.time_since_epoch()).count();
 }
@@ -198,14 +198,26 @@ void IPCChannel::broadcast(const uint8_t* data, size_t length) {
         ssize_t sent = writev(it->fd, iov, 2);
         if (sent < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Socket buffer full, skip this client
+                // Socket buffer full - client is slow
+                // Log and continue - don't drop the client
+                static uint64_t skip_count = 0;
+                if (++skip_count % 1000 == 0) {
+                    std::cerr << "[IPC] Warning: Skipped " << skip_count << " messages due to full buffers" << std::endl;
+                }
                 ++it;
                 continue;
             }
-            // Connection broken
-            close(it->fd);
-            it = clients_.erase(it);
-            clients_connected_ = clients_.size();
+            if (errno == EPIPE || errno == ECONNRESET) {
+                // Connection actually broken
+                std::cerr << "[IPC] Client disconnected from " << socket_path_ << std::endl;
+                close(it->fd);
+                it = clients_.erase(it);
+                clients_connected_ = clients_.size();
+                continue;
+            }
+            // Other errors - log but don't disconnect
+            std::cerr << "[IPC] Send error: " << strerror(errno) << " - keeping client" << std::endl;
+            ++it;
         } else {
             ++it;
             messages_sent_++;

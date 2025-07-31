@@ -124,8 +124,9 @@ func (c *Client) Close() error {
 func (c *Client) receiveLoop() {
 	defer c.wg.Done()
 	
-	// Buffer for streaming data
-	buffer := make([]byte, 0, 65536)
+	// Larger buffers for blocks
+	const maxMessageSize = 1024 * 1024 // 1MB max
+	buffer := make([]byte, 0, maxMessageSize)
 	tmpBuffer := make([]byte, 65536)
 	
 	for c.running.Load() {
@@ -140,6 +141,13 @@ func (c *Client) receiveLoop() {
 		
 		// Append to buffer
 		buffer = append(buffer, tmpBuffer[:n]...)
+		
+		// Prevent buffer overflow
+		if len(buffer) > maxMessageSize {
+			fmt.Printf("Buffer overflow, resetting\n")
+			buffer = buffer[:0]
+			continue
+		}
 		
 		// Process complete messages in buffer
 		for len(buffer) >= HeaderSize {

@@ -101,6 +101,9 @@ int main(int argc, char* argv[]) {
     uint64_t total_blocks = 0;
     auto start_time = std::chrono::high_resolution_clock::now();
     
+    // Wait a bit for clients to connect
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    
     // Main loop
     while (running) {
         // Send external message
@@ -108,8 +111,8 @@ int main(int argc, char* argv[]) {
         ipc.sendExternalMessage(ext_msg.data(), ext_msg.size());
         total_ext_messages++;
         
-        // Every 100 messages, send a block
-        if (total_ext_messages % 100 == 0) {
+        // Every 10 messages, send a block (changed from 100 for easier testing)
+        if (total_ext_messages % 10 == 0) {
             auto block = generateBlock(message_size * 10); // Blocks are larger
             ipc.sendNewBlock(block.data(), block.size());
             total_blocks++;
