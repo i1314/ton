@@ -738,6 +738,7 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                 }
                 
                 // IPC hook for new blocks
+                LOG(INFO) << "[IPC_HOOK] Calling hookNewBlockWithData for block=" << broadcast.block_id.to_str();
                 try {
                   std::vector<std::string> tx_hashes;
                   for (const auto& tx : tx_info) {
@@ -751,8 +752,10 @@ void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
                   ton_ipc_hooks::hookNewBlockWithData(broadcast.block_id.to_str(), gen_utime, 
                                              static_cast<uint32_t>(delay), 
                                              account_count, tx_count, tx_hashes, broadcast.data);
+                } catch (const std::exception& e) {
+                  LOG(ERROR) << "[IPC_HOOK] Exception: " << e.what();
                 } catch (...) {
-                  // Ignore IPC errors to not affect node operation
+                  LOG(ERROR) << "[IPC_HOOK] Unknown exception";
                 }
               } else {
                 LOG(ERROR) << "  No account blocks in this block";

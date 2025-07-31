@@ -835,10 +835,13 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ex
                  << " data_hex=" << hex_data;
   
   // IPC hook for external messages
+  LOG(INFO) << "[IPC_HOOK] Calling hookExternalMessage for dest=" << dest_addr;
   try {
     ton_ipc_hooks::hookExternalMessage(PSTRING() << src, dest_addr, query.message_->data_, "");
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "[IPC_HOOK] Exception: " << e.what();
   } catch (...) {
-    // Ignore IPC errors to not affect node operation
+    LOG(ERROR) << "[IPC_HOOK] Unknown exception";
   }
   
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
