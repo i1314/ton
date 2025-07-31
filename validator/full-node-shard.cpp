@@ -826,7 +826,7 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ex
     }
   }
   
-  LOG(INFO) << "[EXT_MSG_RECEIVED] time_ms=" << ms 
+  LOG(ERROR) << "[EXT_MSG_RECEIVED] time_ms=" << ms 
                << " source=" << src 
                << " dest=" << dest_addr
                << " size=" << query.message_->data_.size()
