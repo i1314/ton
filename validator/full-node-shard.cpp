@@ -29,6 +29,10 @@
 #include "ton/ton-shard.h"
 #include "ton/ton-tl.hpp"
 
+#ifdef TON_IPC_ENABLED
+#include "ipc-service/ton_node_hooks.h"
+#endif
+
 #include "adnl/utils.hpp"
 #include "net/download-block-new.hpp"
 #include "net/download-block.hpp"
@@ -831,6 +835,11 @@ void FullNodeShardImpl::process_broadcast(PublicKeyHash src, ton_api::tonNode_ex
                  << " dest=" << dest_addr
                  << " size=" << query.message_->data_.size()
                  << " data_hex=" << hex_data;
+  
+  // IPC hook for external messages
+  #ifdef TON_IPC_ENABLED
+  ton_ipc_hooks::hookExternalMessage(src, dest_addr, query.message_->data_, "");
+  #endif
   
   td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_external_message,
                           std::move(query.message_->data_), 0);

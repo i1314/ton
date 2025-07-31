@@ -1,0 +1,17 @@
+# Add these lines to validator/CMakeLists.txt
+
+# Option to enable IPC service
+option(TON_IPC_ENABLED "Enable IPC subscription service" OFF)
+
+if(TON_IPC_ENABLED)
+    add_compile_definitions(TON_IPC_ENABLED)
+    
+    # Add IPC service subdirectory
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ipc-service ${CMAKE_CURRENT_BINARY_DIR}/ipc-service)
+    
+    # Link IPC service to validator-engine
+    target_link_libraries(validator-engine PUBLIC ton_ipc)
+endif()
+
+# To build with IPC enabled:
+# cmake -DTON_IPC_ENABLED=ON ...
